@@ -4,7 +4,6 @@ import socket
 from urllib.parse import urlparse
 from datetime import datetime, timedelta
 from typing import Tuple, List, Optional
-import whois
 from models import RiskLevel, PaymentGateway, RiskScore, Merchant
 import logging
 
