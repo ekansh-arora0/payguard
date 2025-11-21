@@ -1,0 +1,6 @@
+PLACEHOLDER ICONS NOTE:
+The extension currently uses a simple SVG icon in the icons/ directory.
+For production, please replace icon16.png, icon48.png, and icon128.png 
+with proper PNG versions of your PayGuard branding.
+
+You can use the provided icon.svg as a base or create custom designs.
