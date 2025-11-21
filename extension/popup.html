@@ -1,0 +1,120 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>PayGuard</title>
+  <link rel="stylesheet" href="popup.css">
+</head>
+<body>
+  <div class="container">
+    <!-- Header -->
+    <div class="header">
+      <div class="logo">
+        <svg width="24" height="24" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+          <path d="M12 2L3 7V12C3 16.97 6.84 21.5 12 22.5C17.16 21.5 21 16.97 21 12V7L12 2Z" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+          <path d="M9 12L11 14L15 10" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+        </svg>
+        <h1>PayGuard</h1>
+      </div>
+      <button id="refreshBtn" class="refresh-btn" title="Refresh risk score">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor">
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+        </svg>
+      </button>
+    </div>
+
+    <!-- Loading State -->
+    <div id="loadingState" class="loading-state">
+      <div class="spinner"></div>
+      <p>Analyzing website...</p>
+    </div>
+
+    <!-- Error State -->
+    <div id="errorState" class="error-state hidden">
+      <div class="error-icon">
+        <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor">
+          <circle cx="12" cy="12" r="10" stroke-width="2"/>
+          <line x1="12" y1="8" x2="12" y2="12" stroke-width="2" stroke-linecap="round"/>
+          <line x1="12" y1="16" x2="12.01" y2="16" stroke-width="2" stroke-linecap="round"/>
+        </svg>
+      </div>
+      <h3 id="errorTitle">Connection Error</h3>
+      <p id="errorMessage">Unable to connect to PayGuard API</p>
+      <button id="retryBtn" class="retry-btn">Try Again</button>
+    </div>
+
+    <!-- Main Content -->
+    <div id="mainContent" class="main-content hidden">
+      <!-- Trust Score Card -->
+      <div class="score-card">
+        <div class="score-circle" id="scoreCircle">
+          <svg class="progress-ring" width="120" height="120">
+            <circle class="progress-ring-bg" cx="60" cy="60" r="52" />
+            <circle class="progress-ring-fill" id="progressRing" cx="60" cy="60" r="52" />
+          </svg>
+          <div class="score-value">
+            <span id="trustScore">--</span>
+            <span class="score-label">Trust Score</span>
+          </div>
+        </div>
+        <div class="risk-badge" id="riskBadge">
+          <span id="riskLevel">Analyzing...</span>
+        </div>
+      </div>
+
+      <!-- Website Info -->
+      <div class="website-info">
+        <div class="info-item">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 12a9 9 0 01-9 9m9-9a9 9 0 00-9-9m9 9H3m9 9a9 9 0 01-9-9m9 9c1.657 0 3-4.03 3-9s-1.343-9-3-9m0 18c-1.657 0-3-4.03-3-9s1.343-9 3-9m-9 9a9 9 0 019-9" />
+          </svg>
+          <span id="websiteDomain">--</span>
+        </div>
+        <div class="info-item">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" />
+          </svg>
+          <span id="sslStatus">--</span>
+        </div>
+      </div>
+
+      <!-- Risk Factors & Safety Indicators -->
+      <div class="details-section">
+        <div id="riskFactorsSection" class="detail-card hidden">
+          <div class="detail-header">
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#ef4444">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+            </svg>
+            <h3>Risk Factors</h3>
+          </div>
+          <ul id="riskFactorsList" class="factor-list"></ul>
+        </div>
+
+        <div id="safetySection" class="detail-card hidden">
+          <div class="detail-header">
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#10b981">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
+            </svg>
+            <h3>Safety Indicators</h3>
+          </div>
+          <ul id="safetyList" class="factor-list"></ul>
+        </div>
+      </div>
+
+      <!-- Education Message -->
+      <div class="education-card">
+        <div class="education-icon" id="educationIcon">ℹ️</div>
+        <p id="educationMessage">--</p>
+      </div>
+    </div>
+
+    <!-- Footer -->
+    <div class="footer">
+      <span class="footer-text">Protected by PayGuard</span>
+    </div>
+  </div>
+
+  <script src="popup.js"></script>
+</body>
+</html>
