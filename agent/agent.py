@@ -30,8 +30,16 @@ class Agent:
         self._last_change_ts = 0.0
 
     def start(self):
-        print(f"🛡️ PayGuard Desktop Agent Started")
+        print("""
+    🛡️  PAYGUARD ACTIVE
+    ==================
+    Monitoring Screen & Clipboard
+    Protecting your device...
+        """)
         print(f"Connecting to backend at http://{self.server_host}:{self.server_port}")
+        
+        # Notify user that PayGuard is active
+        self._notify_native("🛡️ PayGuard Active", "Your device is now being protected from scams and AI fakes.", is_critical=False)
         
         # Start threads
         t_screen = threading.Thread(target=self._monitor_screen, daemon=True)
@@ -159,7 +167,11 @@ class Agent:
             # Encode to base64
             b64_data = base64.b64encode(image_bytes).decode('utf-8')
             
-            payload = json.dumps({"image_b64": b64_data, "static": bool(static)})
+            payload = json.dumps({
+                "url": f"local://{source}",
+                "content": b64_data,
+                "metadata": {"static": bool(static), "source": source}
+            })
             
             conn = http.client.HTTPConnection(self.server_host, self.server_port, timeout=15)
             conn.request("POST", "/api/media-risk/bytes", body=payload, headers={
