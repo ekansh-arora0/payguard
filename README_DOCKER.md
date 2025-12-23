@@ -2,24 +2,16 @@
 
 This guide explains how to package and run the PayGuard backend using Docker. This is the easiest way to share the project with friends or deploy it to a server.
 
-## 🚀 Getting Started
+## Prerequisites
 
-### 1. Prerequisites
-- [Docker Desktop](https://www.docker.com/products/docker-desktop/) installed and running.
-- **Git LFS**: The AI model weights are large. You must have [Git LFS](https://git-lfs.github.com/) installed before cloning.
+1.  **Docker & Docker Compose**: Install from [docker.com](https://www.docker.com/).
+2.  **Git LFS**: The AI model weights are stored using Git LFS. Ensure it's installed before cloning:
+    ```bash
+    git lfs install
+    git clone https://github.com/ekansh-arora0/payguard.git
+    ```
 
-### 2. Setup
-```bash
-# Install Git LFS
-git lfs install
-
-# Clone the repo
-git clone <your-repo-url>
-cd payguard
-
-# Pull the large model files
-git lfs pull
-```
+## Quick Start
 
 ### 3. Run the Backend (Docker)
 Open your terminal in the root of the project and run:
