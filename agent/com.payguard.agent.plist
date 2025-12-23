@@ -1,0 +1,21 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+  <key>Label</key>
+  <string>com.payguard.agent</string>
+  <key>ProgramArguments</key>
+  <array>
+    <string>/Users/ekans/payguard/.venv/bin/python</string>
+    <string>/Users/ekans/payguard/agent/agent.py</string>
+  </array>
+  <key>RunAtLoad</key>
+  <true/>
+  <key>WorkingDirectory</key>
+  <string>/Users/ekans/payguard</string>
+  <key>StandardOutPath</key>
+  <string>/Users/ekans/payguard/agent/agent.out.log</string>
+  <key>StandardErrorPath</key>
+  <string>/Users/ekans/payguard/agent/agent.err.log</string>
+</dict>
+</plist>

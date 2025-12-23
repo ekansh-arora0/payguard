@@ -1,0 +1,112 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>VIRUS DETECTED - Fake Scam Pop-up Test</title>
+    <style>
+        body {
+            margin: 0;
+            font-family: Arial, sans-serif;
+            background: #000;
+        }
+        
+        .scam-popup {
+            position: fixed;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background: #cc0000;
+            color: #fff;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            text-align: center;
+            z-index: 9999;
+        }
+        
+        .content {
+            max-width: 800px;
+            padding: 40px;
+        }
+        
+        h1 {
+            font-size: 72px;
+            margin: 20px 0;
+            animation: blink 1s infinite;
+        }
+        
+        @keyframes blink {
+            0%, 50% { opacity: 1; }
+            51%, 100% { opacity: 0.5; }
+        }
+        
+        .warning-icon {
+            font-size: 120px;
+        }
+        
+        .message {
+            font-size: 32px;
+            margin: 30px 0;
+            font-weight: bold;
+        }
+        
+        .error-code {
+            font-size: 24px;
+            background: #990000;
+            padding: 20px;
+            margin: 20px 0;
+            border: 3px solid #ffff00;
+        }
+        
+        .call-now {
+            font-size: 48px;
+            background: #ffff00;
+            color: #000;
+            padding: 30px;
+            margin: 30px 0;
+            font-weight: bold;
+            animation: pulse 0.5s infinite;
+        }
+        
+        @keyframes pulse {
+            0%, 100% { transform: scale(1); }
+            50% { transform: scale(1.05); }
+        }
+        
+        .instructions {
+            font-size: 28px;
+            margin: 20px 0;
+        }
+    </style>
+</head>
+<body>
+    <div class="scam-popup">
+        <div class="content">
+            <div class="warning-icon">⚠️</div>
+            <h1>CRITICAL VIRUS ALERT!</h1>
+            <div class="message">
+                YOUR COMPUTER HAS BEEN INFECTED WITH MALWARE!<br>
+                YOUR PC IS BLOCKED!<br>
+                IMMEDIATE ACTION REQUIRED!
+            </div>
+            <div class="error-code">
+                ERROR CODE: 0x80070643<br>
+                SYSTEM HEAVILY DAMAGED
+            </div>
+            <div class="call-now">
+                ☎️ CALL MICROSOFT SUPPORT NOW<br>
+                TOLL FREE: 1-888-555-SCAM
+            </div>
+            <div class="instructions">
+                DO NOT CLOSE THIS WINDOW<br>
+                CALL CUSTOMER SUPPORT IMMEDIATELY<br>
+            PAY $299.99 TO FIX YOUR
+ COMPUTER<br>
+                CLICK OK TO INSTALL ANTIVIRUS
+            </div>
+        </div>
+    </div>
+</body>
+</html>

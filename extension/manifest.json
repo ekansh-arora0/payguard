@@ -1,19 +1,32 @@
 {
   "manifest_version": 3,
-  "name": "PayGuard",
-  "version": "1.0.0",
-  "description": "Real-time website and merchant risk scoring to protect you from online scams",
+  "name": "PayGuard - Scam Protection",
+  "version": "2.0.0",
+  "description": "Protects seniors from fake virus warnings, tech support scams, and fraudulent pop-ups with real-time detection and clear alerts.",
   "permissions": [
-    "activeTab",
     "tabs",
-    "storage"
-  ],
-  "host_permissions": [
-    "<all_urls>"
+    "alarms",
+    "notifications",
+    "idle"
   ],
   "background": {
-    "service_worker": "background.js"
+    "service_worker": "scam-monitor.js"
   },
+  "content_scripts": [
+    {
+      "matches": [
+        "<all_urls>"
+      ],
+      "js": [
+        "content.js",
+        "scam-alert.js"
+      ],
+      "css": [
+        "scam-alert.css"
+      ],
+      "run_at": "document_end"
+    }
+  ],
   "action": {
     "default_popup": "popup.html",
     "default_icon": {
@@ -26,8 +39,5 @@
     "16": "icons/icon16.png",
     "48": "icons/icon48.png",
     "128": "icons/icon128.png"
-  },
-  "content_security_policy": {
-    "extension_pages": "script-src 'self'; object-src 'self'"
   }
 }

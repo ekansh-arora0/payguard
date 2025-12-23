@@ -70,6 +70,7 @@ class RiskScore(BaseModel):
     
 class RiskCheckRequest(BaseModel):
     url: str
+    overlay_text: Optional[str] = None
 
 # Fraud Report Model
 class FraudReport(BaseModel):
@@ -129,3 +130,45 @@ class Stats(BaseModel):
     merchants_tracked: int
     fraud_reports: int
     avg_trust_score: float
+
+class LabelFeedback(BaseModel):
+    id: str = Field(default_factory=lambda: str(uuid.uuid4()))
+    url: str
+    domain: str
+    label: int
+    source: Optional[str] = None
+    created_at: datetime = Field(default_factory=datetime.utcnow)
+
+class LabelFeedbackCreate(BaseModel):
+    url: str
+    domain: str
+    label: int
+    source: Optional[str] = None
+
+class ContentRiskRequest(BaseModel):
+    url: str
+    content: Optional[str] = None  # Base64 content
+    html: Optional[str] = None
+    overlay_text: Optional[str] = None
+    overlay_meta: Optional[Dict[str, Any]] = None
+    metadata: Optional[Dict[str, Any]] = None
+
+class ScamAlert(BaseModel):
+    """Structured scam alert data with confidence scoring"""
+    is_scam: bool
+    confidence: float = Field(..., ge=0, le=100, description="Confidence score 0-100")
+    detected_patterns: List[str] = []
+    senior_message: str
+    action_advice: str
+
+class MediaRisk(BaseModel):
+    id: str = Field(default_factory=lambda: str(uuid.uuid4()))
+    url: str
+    domain: str
+    media_score: float = Field(..., ge=0, le=100)
+    media_color: RiskLevel
+    reasons: List[str] = []
+    image_fake_prob: Optional[float] = None
+    video_fake_prob: Optional[float] = None
+    checked_at: datetime = Field(default_factory=datetime.utcnow)
+    scam_alert: Optional[ScamAlert] = None  # Enhanced for scam detection

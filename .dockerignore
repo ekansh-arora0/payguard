@@ -1,0 +1,42 @@
+.git
+.emergent
+**/__pycache__
+**/*.pyc
+**/*.pyo
+**/*.pyd
+.db
+mongodb_data
+data/agent
+agent/screenshots
+venv
+.venv
+.env
+Dockerfile
+docker-compose.yml
+README.md
+QUICK_START.md
+test_*.py
+
+# Large datasets and results
+dataset
+results
+RedFace
+Phishing-Email-Dataset
+data
+combined_dataset.pkl
+combined_dataset_all.pkl
+vonDataset20180426.dill
+spam.csv
+tmp
+
+# DIRE data (keep models)
+DIRE/data/train
+DIRE/data/val
+DIRE/data/test
+DIRE/data/lsun
+DIRE/data/imagenet
+DIRE/data/celebahq
+
+# Backend large files
+backend/cache
+backend/mongodb_data

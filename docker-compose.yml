@@ -1,0 +1,30 @@
+services:
+  mongodb:
+    image: mongo:6.0
+    ports:
+      - "27017:27017"
+    volumes:
+      - mongodb_data:/data/db
+    networks:
+      - payguard-network
+
+  backend:
+    build: .
+    ports:
+      - "8002:8002"
+    environment:
+      - MONGO_URL=mongodb://mongodb:27017
+      - DB_NAME=payguard
+      - DIRE_HOME=/app/DIRE
+      - DIRE_MODEL_PATH=/app/DIRE/data/exp/lsun_adm/ckpt/model_epoch_latest.pth
+    depends_on:
+      - mongodb
+    networks:
+      - payguard-network
+
+networks:
+  payguard-network:
+    driver: bridge
+
+volumes:
+  mongodb_data:

@@ -1,80 +1,94 @@
-# See https://help.github.com/articles/ignoring-files/ for more about ignoring files.
-
-# IDE and editors
-.idea/
-.vscode/
-
-# Dependencies
-node_modules/
-/node_modules
-/.pnp
-.pnp.js
-.yarn/install-state.gz
-.yarn/*
-!.yarn/patches
-!.yarn/plugins
-!.yarn/releases
-!.yarn/versions
-
-# Testing
-/coverage
-
-# Next.js
-/.next/
-/out/
-next-env.d.ts
-*.tsbuildinfo
-
-# Production builds
-/build
-dist/
-dist
-
-# Environment files (comprehensive coverage)
-
-*token.json*
-*credentials.json*
-
-# Logs and debug files
-npm-debug.log*
-yarn-debug.log*
-yarn-error.log*
-.pnpm-debug.log*
-dump.rdb
-
-# System files
-.DS_Store
-*.pem
-
 # Python
 __pycache__/
-*pyc*
+*.py[cod]
+*$py.class
+*.so
+.Python
+env/
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+
+# Virtual Environment
 venv/
-.venv/
+ENV/
 
-# Development tools
-chainlit.md
-.chainlit
-.ipynb_checkpoints/
-.ac
+# IDEs
+.vscode/
+.idea/
 
-# Deployment
-.vercel
+# OS
+.DS_Store
+Thumbs.db
 
-# Data and databases
-agenthub/agents/youtube/db
+# Docker
+backend/mongodb_data/
 
-# Archive files and large assets
-**/*.zip
-**/*.tar.gz
-**/*.tar
-**/*.tgz
-*.pack
-*.deb
-*.dylib
+# Data and Models (Large Files)
+*.pkl
+*.dill
+*.csv
+*.tar.gz
+*.zip
+*.tar
+backend/cache/
+backend/models/
+Phishing-Email-Dataset/
+dataset/
+data/
+kaggle/
+results/
+tmp/
+combined_dataset.pkl
+combined_dataset_all.pkl
+vonDataset20180426.dill
+spam.csv
 
-# Build caches
-.cache/
+# Test and Temp Files
+test_b64.txt
+test_fake_b64.txt
+test.png
+ai_test.png
+scam_test.jpg
+test_scam.png
 
-# Mobile development
-android-sdk/ 
+# RedFace (if not needed)
+RedFace/
+
+# Local test files
+*_test.jpg
+scam_test_text.jpg
+test_scam_detection.py
+test_clean_ui.py
+test_api.py
+test_all_scenarios.py
+verify_combined_dataset.py
+compile_datasets.py
+train_bert_nlp.py
+scam_detector.py
+SCAM_DETECTOR_GUIDE.md
+PayGuard_ScamDetector.scpt
+bert_phishing_detector/
+ml/
+models/
+docs/
+tests/
+*.log
+.DS_Store
+node_modules/
+__pycache__/
+*.pyc
+.env
+.pytest_cache/

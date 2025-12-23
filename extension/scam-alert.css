@@ -1,0 +1,200 @@
+/* PayGuard Scam Alert Overlay Styles - Senior-friendly design */
+
+.payguard-scam-overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  z-index: 2147483647; /* Maximum z-index */
+  background: linear-gradient(135deg, #dc2626 0%, #991b1b 100%);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  animation: payguard-fade-in 0.3s ease-in-out;
+}
+
+@keyframes payguard-fade-in {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+.payguard-scam-content {
+  background: white;
+  border-radius: 20px;
+  padding: 60px 80px;
+  max-width: 800px;
+  text-align: center;
+  box-shadow: 0 20px 60px rgba(0, 0, 0, 0.5);
+  animation: payguard-slide-up 0.4s ease-out;
+}
+
+@keyframes payguard-slide-up {
+  from {
+    transform: translateY(50px);
+    opacity: 0;
+  }
+  to {
+    transform: translateY(0);
+    opacity: 1;
+  }
+}
+
+.payguard-scam-icon {
+  font-size: 80px;
+  margin-bottom: 20px;
+  animation: payguard-pulse 2s ease-in-out infinite;
+}
+
+@keyframes payguard-pulse {
+  0%, 100% {
+    transform: scale(1);
+  }
+  50% {
+    transform: scale(1.1);
+  }
+}
+
+.payguard-scam-title {
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+  font-size: 48px;
+  font-weight: 900;
+  color: #dc2626;
+  margin: 0 0 30px 0;
+  line-height: 1.2;
+  text-transform: uppercase;
+  letter-spacing: 2px;
+}
+
+.payguard-scam-message {
+  background: #fee2e2;
+  border: 4px solid #dc2626;
+  border-radius: 12px;
+  padding: 30px;
+  margin: 30px 0;
+}
+
+.payguard-main-message {
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+  font-size: 28px;
+  font-weight: 700;
+  color: #1f2937;
+  margin: 0;
+  line-height: 1.5;
+}
+
+.payguard-scam-advice {
+  margin: 30px 0;
+}
+
+.payguard-advice-list {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+  text-align: left;
+}
+
+.payguard-advice-list li {
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+  font-size: 24px;
+  font-weight: 600;
+  color: #1f2937;
+  padding: 15px 20px;
+  margin: 10px 0;
+  background: #f9fafb;
+  border-radius: 10px;
+  border-left: 6px solid #059669;
+}
+
+.payguard-advice-list li:first-child {
+  border-left-color: #059669; /* Green for positive action */
+}
+
+.payguard-advice-list li:not(:first-child) {
+  border-left-color: #dc2626; /* Red for warnings */
+}
+
+.payguard-scam-confidence {
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+  font-size: 18px;
+  color: #6b7280;
+  margin: 20px 0;
+}
+
+.payguard-close-button {
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+  font-size: 28px;
+  font-weight: 700;
+  color: white;
+  background: linear-gradient(135deg, #059669 0%, #047857 100%);
+  border: none;
+  border-radius: 16px;
+  padding: 24px 48px;
+  margin: 30px 0 20px 0;
+  cursor: pointer;
+  transition: all 0.2s;
+  box-shadow: 0 4px 12px rgba(5, 150, 105, 0.3);
+}
+
+.payguard-close-button:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 8px 20px rgba(5, 150, 105, 0.4);
+}
+
+.payguard-close-button:active {
+  transform: translateY(0);
+  box-shadow: 0 2px 8px rgba(5, 150, 105, 0.3);
+}
+
+.payguard-help-text {
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+  font-size: 20px;
+  color: #6b7280;
+  margin-top: 20px;
+  font-style: italic;
+}
+
+/* Responsive design for smaller screens */
+@media (max-width: 900px) {
+  .payguard-scam-content {
+    padding: 40px 40px;
+    margin: 20px;
+    max-width: 90%;
+  }
+
+  .payguard-scam-title {
+    font-size: 36px;
+  }
+
+  .payguard-main-message {
+    font-size: 22px;
+  }
+
+  .payguard-advice-list li {
+    font-size: 20px;
+  }
+
+  .payguard-close-button {
+    font-size: 24px;
+    padding: 20px 40px;
+  }
+}
+
+/* High contrast mode for accessibility */
+@media (prefers-contrast: high) {
+  .payguard-scam-overlay {
+    background: #000;
+  }
+
+  .payguard-scam-content {
+    border: 4px solid #dc2626;
+  }
+
+  .payguard-scam-title {
+    text-shadow: 2px 2px 4px rgba(0, 0, 0, 0.5);
+  }
+}

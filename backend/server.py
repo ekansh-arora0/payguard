@@ -1,4 +1,4 @@
-from fastapi import FastAPI, APIRouter, HTTPException, Depends, Security
+from fastapi import FastAPI, APIRouter, HTTPException, Depends, Security, UploadFile, File
 from fastapi.security import APIKeyHeader
 from dotenv import load_dotenv
 from starlette.middleware.cors import CORSMiddleware
@@ -8,17 +8,20 @@ import logging
 from pathlib import Path
 from typing import List, Optional
 from datetime import datetime, timedelta
+import time
 
-from models import (
+from .models import (
     RiskCheckRequest, RiskScore, RiskLevel,
     Merchant, MerchantCreate,
     FraudReport, FraudReportCreate,
     TransactionCheck, TransactionCheckRequest,
     CustomRule, CustomRuleCreate,
-    APIKeyCreate, Stats
+    APIKeyCreate, Stats, LabelFeedback, LabelFeedbackCreate, ContentRiskRequest,
+    MediaRisk, ScamAlert
 )
-from risk_engine import RiskScoringEngine
-from auth import APIKeyManager, get_api_key
+import httpx
+from .risk_engine import RiskScoringEngine
+from .auth import APIKeyManager, get_api_key
 
 ROOT_DIR = Path(__file__).parent
 load_dotenv(ROOT_DIR / '.env')
@@ -54,6 +57,8 @@ async def root():
         "status": "operational",
         "endpoints": [
             "/api/risk",
+            "/api/media-risk",
+            "/api/media-risk-image",
             "/api/merchant/history",
             "/api/transaction/check",
             "/api/institution/custom-rules",
@@ -78,17 +83,44 @@ async def check_risk(
     This is where the ML model will be plugged in later.
     """
     try:
+        t0 = time.time()
         # Validate API key if provided (optional for public demo)
         if api_key:
             await api_key_manager.validate_api_key(api_key)
         
         logger.info(f"Checking risk for URL: {request.url}")
         
-        # Calculate risk using engine (replace with ML model later)
-        risk_score = await risk_engine.calculate_risk(request.url)
+        # Calculate risk using engine with HTML content to power content ML
+        html = None
+        try:
+            async with httpx.AsyncClient(timeout=3.0) as client:
+                resp = await client.get(request.url, headers={"User-Agent": "PayGuard/1.0"}, follow_redirects=True)
+                if resp.status_code < 500:
+                    html = resp.text[:100000]
+        except Exception:
+            html = None
+        risk_score = await risk_engine.calculate_risk(request.url, content=html)
+        # Overlay text scam analysis if provided
+        try:
+            if request.overlay_text:
+                scam_res = risk_engine._analyze_text_for_scam(request.overlay_text)
+                if scam_res.get("is_scam"):
+                    risk_score.risk_level = RiskLevel.HIGH
+                    risk_score.trust_score = max(0.0, min(100.0, min(risk_score.trust_score, 20.0)))
+                    reason = f"Scam popup detected (confidence: {int(scam_res.get('confidence', 0))}%)"
+                    risk_score.risk_factors.append(reason)
+        except Exception:
+            pass
         
-        # Store the check in database
         await db.risk_checks.insert_one(risk_score.dict())
+        await db.metrics.insert_one({
+            "endpoint": "POST /api/risk",
+            "url": request.url,
+            "trust_score": risk_score.trust_score,
+            "risk_level": risk_score.risk_level.value,
+            "latency_ms": int((time.time() - t0) * 1000),
+            "timestamp": datetime.utcnow()
+        })
         
         # Update merchant record
         await _update_merchant_record(risk_score)
@@ -106,6 +138,7 @@ async def get_risk_by_url(
 ):
     """Get risk score for a URL (GET method for browser extensions)"""
     try:
+        t0 = time.time()
         if api_key:
             await api_key_manager.validate_api_key(api_key)
         
@@ -118,9 +151,24 @@ async def get_risk_by_url(
         if recent_check:
             return RiskScore(**recent_check)
         
-        # Calculate new risk score
-        risk_score = await risk_engine.calculate_risk(url)
+        html = None
+        try:
+            async with httpx.AsyncClient(timeout=3.0) as client:
+                resp = await client.get(url, headers={"User-Agent": "PayGuard/1.0"}, follow_redirects=True)
+                if resp.status_code < 500:
+                    html = resp.text[:100000]
+        except Exception:
+            html = None
+        risk_score = await risk_engine.calculate_risk(url, content=html)
         await db.risk_checks.insert_one(risk_score.dict())
+        await db.metrics.insert_one({
+            "endpoint": "GET /api/risk",
+            "url": url,
+            "trust_score": risk_score.trust_score,
+            "risk_level": risk_score.risk_level.value,
+            "latency_ms": int((time.time() - t0) * 1000),
+            "timestamp": datetime.utcnow()
+        })
         await _update_merchant_record(risk_score)
         
         return risk_score
@@ -379,6 +427,242 @@ async def generate_api_key(request: APIKeyCreate):
         logger.error(f"Error generating API key: {str(e)}")
         raise HTTPException(status_code=500, detail=str(e))
 
+# ============= Media Risk =============
+@api_router.get("/media-risk", response_model=MediaRisk)
+async def get_media_risk(url: str, force: Optional[bool] = False, api_key: Optional[str] = Depends(get_api_key)):
+    try:
+        t0 = time.time()
+        if api_key:
+            await api_key_manager.validate_api_key(api_key)
+        recent = await db.media_checks.find_one(
+            {"url": url, "checked_at": {"$gte": datetime.utcnow() - timedelta(hours=24)}},
+            sort=[("checked_at", -1)]
+        )
+        if recent and not force:
+            return MediaRisk(**recent)
+        media = await risk_engine.calculate_media_risk(url)
+        await db.media_checks.insert_one(media.dict())
+        await db.metrics.insert_one({
+            "endpoint": "GET /api/media-risk",
+            "url": url,
+            "media_score": media.media_score,
+            "media_color": media.media_color.value,
+            "latency_ms": int((time.time() - t0) * 1000),
+            "timestamp": datetime.utcnow()
+        })
+        return media
+    except Exception as e:
+        logger.error(f"Error getting media risk: {str(e)}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+@api_router.post("/media-risk-image", response_model=MediaRisk)
+async def post_media_risk_image(file: UploadFile = File(...), api_key: Optional[str] = Depends(get_api_key)):
+    try:
+        t0 = time.time()
+        if api_key:
+            await api_key_manager.validate_api_key(api_key)
+        b = await file.read()
+        static = bool(payload.get('static', False))
+        p = None
+        score = 0.0
+        color = RiskLevel.LOW
+        media = MediaRisk(
+            url="uploaded",
+            domain="local",
+            media_score=round(score, 1),
+            media_color=color,
+            reasons=(["Image appears AI-generated"] if p >= 0.8 else []),
+            image_fake_prob=round(score, 1)
+        )
+        await db.metrics.insert_one({
+            "endpoint": "POST /api/media-risk-image",
+            "media_score": media.media_score,
+            "media_color": media.media_color.value,
+            "latency_ms": int((time.time() - t0) * 1000),
+            "timestamp": datetime.utcnow()
+        })
+        return media
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error processing uploaded image: {str(e)}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+@api_router.get("/media-risk-screen", response_model=MediaRisk)
+async def get_media_risk_screen(api_key: Optional[str] = Depends(get_api_key)):
+    try:
+        t0 = time.time()
+        if api_key:
+            await api_key_manager.validate_api_key(api_key)
+        b = await risk_engine.capture_screen_bytes()
+        if b is None:
+            raise HTTPException(status_code=400, detail="Unable to capture screen")
+        p = risk_engine._predict_image_fake_bytes(b)
+        if p is None:
+            raise HTTPException(status_code=400, detail="Unable to process captured image")
+        score = float(p) * 100.0
+        color = RiskLevel.HIGH if score >= 70 else (RiskLevel.MEDIUM if score >= 40 else RiskLevel.LOW)
+        reasons = []
+        scam_alert_data = None
+        cues = risk_engine._screen_visual_cues(b)
+        if cues.get('visual_scam_any'):
+            reasons.append(f"Red/Orange/Yellow alert detected (R:{cues.get('red_ratio')} O:{cues.get('orange_ratio')} Y:{cues.get('yellow_ratio')} T:{cues.get('tile_max_ratio')})")
+            if color != RiskLevel.HIGH:
+                color = RiskLevel.MEDIUM
+        
+        try:
+            # Enhanced scam detection results
+            scam_result = risk_engine._screen_text_alerts(b)
+            if scam_result.get("is_scam"):
+                from .models import ScamAlert
+                scam_alert_data = ScamAlert(
+                    is_scam=scam_result["is_scam"],
+                    confidence=scam_result["confidence"],
+                    detected_patterns=scam_result["detected_patterns"],
+                    senior_message=scam_result["senior_message"],
+                    action_advice=scam_result["action_advice"]
+                )
+                reasons.append(f"Scam detected (confidence: {scam_result['confidence']}%)")
+                color = RiskLevel.HIGH
+            else:
+                # Visual + key phrase synergy
+                patterns = set(scam_result.get("detected_patterns") or [])
+                key_hits = bool(patterns.intersection({
+                    "virus_warning","scare_tactics","action_demand","payment_request","phone_number","error_code","do_not_close","phishing_attempt","sensitive_input_request"
+                }))
+                if (cues.get('visual_scam_any') or cues.get('visual_scam_cues')) and key_hits:
+                    from .models import ScamAlert
+                    conf = max(75, scam_result.get("confidence") or 0)
+                    msg = scam_result.get("senior_message") or "STOP! This is a FAKE warning. Your computer is SAFE."
+                    adv = scam_result.get("action_advice") or "Close this window immediately. Do NOT call or pay."
+                    scam_alert_data = ScamAlert(
+                        is_scam=True,
+                        confidence=conf,
+                        detected_patterns=list(patterns),
+                        senior_message=msg,
+                        action_advice=adv
+                    )
+                    reasons.append(f"Scam detected (confidence: {conf}%)")
+                    color = RiskLevel.HIGH
+        except Exception as e:
+            logger.error(f"Scam detection error: {e}")
+            pass
+        
+        media = MediaRisk(
+            url="screen://local",
+            domain="local",
+            media_score=round(score, 1),
+            media_color=color,
+            reasons=reasons,
+            image_fake_prob=round(score, 1),
+            scam_alert=scam_alert_data
+        )
+        await db.metrics.insert_one({
+            "endpoint": "GET /api/media-risk-screen",
+            "media_score": media.media_score,
+            "media_color": media.media_color.value,
+            "scam_detected": scam_alert_data is not None,
+            "latency_ms": int((time.time() - t0) * 1000),
+            "timestamp": datetime.utcnow()
+        })
+        return media
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error capturing screen: {str(e)}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+@api_router.post("/media-risk/bytes", response_model=MediaRisk)
+async def post_media_risk_bytes(
+    request: ContentRiskRequest,
+    api_key: Optional[str] = Depends(get_api_key)
+):
+    """
+    Endpoint for agent to send raw image bytes for risk analysis.
+    The agent sends base64 encoded bytes in ContentRiskRequest.content.
+    """
+    try:
+        t0 = time.time()
+        if api_key:
+            await api_key_manager.validate_api_key(api_key)
+        
+        import base64
+        try:
+            # Handle potential padding issues or header prefixes
+            b64_str = request.content
+            if "," in b64_str:
+                b64_str = b64_str.split(",")[1]
+            b = base64.b64decode(b64_str)
+        except Exception as e:
+            logger.error(f"Base64 decode error: {e}")
+            raise HTTPException(status_code=400, detail="Invalid base64 content")
+
+        static = request.metadata.get("static", False) if request.metadata else False
+        
+        # Call the risk engine to predict image fake probability
+        p = risk_engine._predict_image_fake_bytes(b, static=static)
+        
+        if p is None:
+            score = 0.0
+            p = 0.0
+        else:
+            score = float(p) * 100.0
+            
+        color = RiskLevel.HIGH if score >= 80 else (RiskLevel.MEDIUM if score >= 60 else RiskLevel.LOW)
+        reasons = []
+        if score >= 80:
+            reasons.append("Image appears AI-generated")
+        
+        scam_alert_data = None
+        
+        # Check for visual scam cues
+        cues = risk_engine._screen_visual_cues(b)
+        if cues.get('visual_scam_any'):
+            reasons.append(f"Visual scam patterns detected (R:{cues.get('red_ratio')} O:{cues.get('orange_ratio')})")
+            if color != RiskLevel.HIGH:
+                color = RiskLevel.MEDIUM
+        
+        # Check for text scam alerts
+        try:
+            scam_result = risk_engine._screen_text_alerts(b)
+            if scam_result.get("is_scam"):
+                scam_alert_data = ScamAlert(
+                    is_scam=scam_result["is_scam"],
+                    confidence=scam_result["confidence"],
+                    detected_patterns=scam_result["detected_patterns"],
+                    senior_message=scam_result["senior_message"],
+                    action_advice=scam_result["action_advice"]
+                )
+                reasons.append(f"Scam detected (confidence: {scam_result['confidence']}%)")
+                color = RiskLevel.HIGH
+        except Exception as e:
+            logger.error(f"Scam detection error: {e}")
+            
+        media = MediaRisk(
+            url="bytes://local",
+            domain="local",
+            media_score=round(score, 1),
+            media_color=color,
+            reasons=reasons,
+            image_fake_prob=round(p, 4),
+            scam_alert=scam_alert_data
+        )
+        
+        await db.metrics.insert_one({
+            "endpoint": "POST /api/media-risk/bytes",
+            "media_score": media.media_score,
+            "media_color": media.media_color.value,
+            "latency_ms": int((time.time() - t0) * 1000),
+            "timestamp": datetime.utcnow()
+        })
+        
+        return media
+    except Exception as e:
+        logger.error(f"Error processing media bytes: {str(e)}")
+        import traceback
+        traceback.print_exc()
+        raise HTTPException(status_code=500, detail=str(e))
+
 # ============= Statistics =============
 
 @api_router.get("/stats", response_model=Stats)
@@ -448,8 +732,6 @@ async def _update_merchant_record(risk_score: RiskScore):
     except Exception as e:
         logger.error(f"Error updating merchant record: {str(e)}")
 
-# Include router in app
-app.include_router(api_router)
 
 app.add_middleware(
     CORSMiddleware,
@@ -462,3 +744,171 @@ app.add_middleware(
 @app.on_event("shutdown")
 async def shutdown_db_client():
     client.close()
+
+@api_router.post("/feedback/label", response_model=LabelFeedback)
+async def submit_label_feedback(
+    feedback: LabelFeedbackCreate,
+    api_key: Optional[str] = Depends(get_api_key)
+):
+    try:
+        if api_key:
+            await api_key_manager.validate_api_key(api_key)
+        doc = LabelFeedback(**feedback.dict())
+        await db.labels_feedback.insert_one(doc.dict())
+        return doc
+    except Exception as e:
+        logger.error(f"Error submitting label feedback: {str(e)}")
+        raise HTTPException(status_code=500, detail=str(e))
+@api_router.post("/risk/content", response_model=RiskScore)
+async def check_risk_with_content(
+    request: ContentRiskRequest,
+    api_key: Optional[str] = Depends(get_api_key)
+):
+    try:
+        t0 = time.time()
+        if api_key:
+            await api_key_manager.validate_api_key(api_key)
+        # short-term cache to stabilize scores for dynamic pages
+        recent_check = await db.risk_checks.find_one(
+            {"url": request.url, "checked_at": {"$gte": datetime.utcnow() - timedelta(minutes=10)}},
+            sort=[("checked_at", -1)]
+        )
+        if recent_check:
+            return RiskScore(**recent_check)
+        html = request.html
+        if html is None and request.url:
+            async with httpx.AsyncClient(timeout=5.0) as client:
+                resp = await client.get(request.url, headers={"User-Agent": "PayGuard/1.0"})
+                resp.raise_for_status()
+                html = resp.text[:100000]
+        risk_score = await risk_engine.calculate_risk(request.url, content=html)
+        await db.risk_checks.insert_one(risk_score.dict())
+        await db.metrics.insert_one({
+            "endpoint": "POST /api/risk/content",
+            "url": request.url,
+            "trust_score": risk_score.trust_score,
+            "risk_level": risk_score.risk_level.value,
+            "latency_ms": int((time.time() - t0) * 1000),
+            "timestamp": datetime.utcnow()
+        })
+        await _update_merchant_record(risk_score)
+        return risk_score
+    except Exception as e:
+        logger.error(f"Error checking risk with content: {str(e)}")
+        raise HTTPException(status_code=500, detail=str(e))
+@api_router.get("/fast-validate")
+async def fast_validate(url: str):
+    try:
+        res = await risk_engine.fast_validate(url)
+        return res
+    except Exception as e:
+        logger.error(f"Error fast validating: {str(e)}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+# Include router in app (after all routes are defined)
+
+@api_router.post("/media-risk/bytes", response_model=MediaRisk)
+async def media_risk_bytes(payload: dict, api_key: Optional[str] = Depends(get_api_key)):
+    try:
+        t0 = time.time()
+        if api_key:
+            await api_key_manager.validate_api_key(api_key)
+        import base64
+        b64 = payload.get('image_b64') or ''
+        try:
+            b = base64.b64decode(b64)
+        except Exception:
+            raise HTTPException(status_code=400, detail="Invalid image data")
+        static = bool(payload.get('static', False))
+        p = None
+        score = 0.0
+        color = RiskLevel.LOW
+        reasons = []
+        # 1. Text Analysis (Fastest)
+        scam_result = risk_engine._screen_text_alerts(b)
+        
+        # 2. Visual Cues (Fast)
+        cues = risk_engine._screen_visual_cues(b)
+        if cues.get('visual_scam_cues'):
+            reasons.append(f"Large red/orange/yellow blocks detected (R:{cues.get('red_ratio')} O:{cues.get('orange_ratio')} Y:{cues.get('yellow_ratio')})")
+            
+        # 3. AI Prediction (Slow - only run if text doesn't already trigger a high-risk alert)
+        is_scam_from_text = scam_result.get("is_scam")
+        
+        # Optimization: Only run heavy AI checks if:
+        # a) It's a static image request (like clipboard)
+        # b) OR there's no immediate text-based scam found
+        if static or not is_scam_from_text:
+            p = risk_engine._predict_image_fake_bytes(b)
+            if p is not None:
+                score = float(p) * 100.0
+                try:
+                    is_logo = risk_engine._is_graphic_or_logo_bytes(b)
+                except Exception:
+                    is_logo = False
+                if p >= 0.80 and not is_logo:
+                    reasons.append("AI-generated image likely")
+        
+        scam_alert_data = None
+        if scam_result.get("is_scam"):
+            from .models import ScamAlert
+            scam_alert_data = ScamAlert(
+                is_scam=scam_result["is_scam"],
+                confidence=scam_result["confidence"],
+                detected_patterns=scam_result["detected_patterns"],
+                senior_message=scam_result["senior_message"],
+                action_advice=scam_result["action_advice"]
+            )
+            reasons.append(f"Scam detected (confidence: {scam_result['confidence']}%)")
+            color = RiskLevel.HIGH
+        else:
+            try:
+                patterns = set(scam_result.get("detected_patterns") or [])
+                key_core = {
+                    "virus_warning","scare_tactics","action_demand","payment_request","phone_number","error_code","do_not_close"
+                }
+                key_hits = bool(patterns.intersection(key_core))
+                if (cues.get('visual_scam_cues') or cues.get('visual_scam_any')) and key_hits:
+                    from .models import ScamAlert
+                    conf = max(75, scam_result.get("confidence") or 0)
+                    msg = scam_result.get("senior_message") or "STOP! This is a FAKE warning. Your computer is SAFE."
+                    adv = scam_result.get("action_advice") or "Close this window immediately. Do NOT call or pay."
+                    scam_alert_data = ScamAlert(
+                        is_scam=True,
+                        confidence=conf,
+                        detected_patterns=list(patterns),
+                        senior_message=msg,
+                        action_advice=adv
+                    )
+                    reasons.append(f"Scam detected (confidence: {conf}%)")
+                    color = RiskLevel.HIGH
+                else:
+                    # No scam alert if only visual cues are present; require text+visual synergy
+                    pass
+            except Exception:
+                pass
+        media = MediaRisk(
+            url="bytes://local",
+            domain="local",
+            media_score=round(score, 1),
+            media_color=color,
+            reasons=reasons,
+            image_fake_prob=(round(score, 1) if p is not None else None),
+            scam_alert=scam_alert_data
+        )
+        await db.metrics.insert_one({
+            "endpoint": "POST /api/media-risk/bytes",
+            "media_score": media.media_score,
+            "media_color": media.media_color.value,
+            "latency_ms": int((time.time() - t0) * 1000),
+            "timestamp": datetime.utcnow()
+        })
+        return media
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error in media-risk/bytes: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+# Include router in app (after all routes are defined)
+app.include_router(api_router)
