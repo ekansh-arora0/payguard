@@ -1,0 +1,155 @@
+{
+  "results": [
+    {
+      "dataset_name": "combined_phishing",
+      "model_name": "Logistic Regression",
+      "accuracy": 0.9739035882566147,
+      "precision": 0.9880636604774535,
+      "recall": 0.9220297029702971,
+      "f1_score": 0.9539052496798975,
+      "roc_auc": 0.9937833352786842,
+      "true_positives": 745,
+      "true_negatives": 1942,
+      "false_positives": 9,
+      "false_negatives": 63,
+      "total_samples": 13792,
+      "training_samples": 11033,
+      "test_samples": 2759,
+      "timestamp": "2026-01-07T21:30:18.940768"
+    },
+    {
+      "dataset_name": "combined_phishing",
+      "model_name": "Random Forest",
+      "accuracy": 0.980427691192461,
+      "precision": 0.9870801033591732,
+      "recall": 0.9455445544554455,
+      "f1_score": 0.965865992414665,
+      "roc_auc": 0.994057693186028,
+      "true_positives": 764,
+      "true_negatives": 1941,
+      "false_positives": 10,
+      "false_negatives": 44,
+      "total_samples": 13792,
+      "training_samples": 11033,
+      "test_samples": 2759,
+      "timestamp": "2026-01-07T21:30:23.440189"
+    },
+    {
+      "dataset_name": "combined_phishing",
+      "model_name": "Naive Bayes",
+      "accuracy": 0.9543312794490757,
+      "precision": 0.9671232876712329,
+      "recall": 0.8737623762376238,
+      "f1_score": 0.918075422626788,
+      "roc_auc": 0.9822533252812723,
+      "true_positives": 706,
+      "true_negatives": 1927,
+      "false_positives": 24,
+      "false_negatives": 102,
+      "total_samples": 13792,
+      "training_samples": 11033,
+      "test_samples": 2759,
+      "timestamp": "2026-01-07T21:30:26.293046"
+    },
+    {
+      "dataset_name": "combined_phishing",
+      "model_name": "Gradient Boosting",
+      "accuracy": 0.965204784342153,
+      "precision": 0.9876712328767123,
+      "recall": 0.8923267326732673,
+      "f1_score": 0.9375812743823146,
+      "roc_auc": 0.987711620341942,
+      "true_positives": 721,
+      "true_negatives": 1942,
+      "false_positives": 9,
+      "false_negatives": 87,
+      "total_samples": 13792,
+      "training_samples": 11033,
+      "test_samples": 2759,
+      "timestamp": "2026-01-07T21:30:52.593944"
+    },
+    {
+      "dataset_name": "combined_phishing",
+      "model_name": "Linear SVM",
+      "accuracy": 0.9818774918448713,
+      "precision": 0.9809644670050761,
+      "recall": 0.9566831683168316,
+      "f1_score": 0.968671679197995,
+      "roc_auc": 0.9938873692597348,
+      "true_positives": 773,
+      "true_negatives": 1936,
+      "false_positives": 15,
+      "false_negatives": 35,
+      "total_samples": 13792,
+      "training_samples": 11033,
+      "test_samples": 2759,
+      "timestamp": "2026-01-07T21:30:55.618381"
+    }
+  ],
+  "report": {
+    "summary": {
+      "total_models_tested": 5,
+      "best_model": "Linear SVM",
+      "best_f1_score": 0.968671679197995,
+      "best_accuracy": 0.9818774918448713,
+      "best_precision": 0.9809644670050761,
+      "best_recall": 0.9566831683168316,
+      "best_roc_auc": 0.9938873692597348
+    },
+    "all_results": [
+      {
+        "model": "Linear SVM",
+        "accuracy": "0.9819",
+        "precision": "0.9810",
+        "recall": "0.9567",
+        "f1_score": "0.9687",
+        "roc_auc": "0.9939"
+      },
+      {
+        "model": "Random Forest",
+        "accuracy": "0.9804",
+        "precision": "0.9871",
+        "recall": "0.9455",
+        "f1_score": "0.9659",
+        "roc_auc": "0.9941"
+      },
+      {
+        "model": "Logistic Regression",
+        "accuracy": "0.9739",
+        "precision": "0.9881",
+        "recall": "0.9220",
+        "f1_score": "0.9539",
+        "roc_auc": "0.9938"
+      },
+      {
+        "model": "Gradient Boosting",
+        "accuracy": "0.9652",
+        "precision": "0.9877",
+        "recall": "0.8923",
+        "f1_score": "0.9376",
+        "roc_auc": "0.9877"
+      },
+      {
+        "model": "Naive Bayes",
+        "accuracy": "0.9543",
+        "precision": "0.9671",
+        "recall": "0.8738",
+        "f1_score": "0.9181",
+        "roc_auc": "0.9823"
+      }
+    ],
+    "confusion_matrix": {
+      "best_model": "Linear SVM",
+      "true_positives": 773,
+      "true_negatives": 1936,
+      "false_positives": 15,
+      "false_negatives": 35
+    },
+    "dataset_info": {
+      "total_samples": 13792,
+      "training_samples": 11033,
+      "test_samples": 2759
+    }
+  },
+  "timestamp": "2026-01-07T21:30:55.637376"
+}

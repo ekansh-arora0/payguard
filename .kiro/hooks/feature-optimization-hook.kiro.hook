@@ -1,0 +1,25 @@
+{
+  "enabled": true,
+  "name": "Feature Optimization & Testing",
+  "description": "Automatically optimizes code and generates comprehensive tests when a big feature is implemented",
+  "version": "1",
+  "when": {
+    "type": "fileEdited",
+    "patterns": [
+      "*.py",
+      "*.js",
+      "*.jsx",
+      "*.ts",
+      "*.tsx",
+      "*.java",
+      "*.cpp",
+      "*.c",
+      "*.go",
+      "*.rs"
+    ]
+  },
+  "then": {
+    "type": "askAgent",
+    "prompt": "I've just implemented a big feature. Please help me:\n\n1. **Code Optimization**: \n   - Review the code for performance improvements\n   - Identify potential bottlenecks\n   - Suggest refactoring opportunities\n   - Check for code duplication and suggest DRY improvements\n   - Optimize algorithms and data structures\n\n2. **Comprehensive Test Generation**:\n   - Generate unit tests for all new functions/methods\n   - Create integration tests for feature workflows\n   - Add edge case tests (null values, empty inputs, boundary conditions)\n   - Generate performance tests for critical paths\n   - Create mock tests for external dependencies\n   - Add error handling tests\n   - Generate property-based tests where applicable\n\n3. **Test Coverage Analysis**:\n   - Identify untested code paths\n   - Suggest additional test scenarios\n   - Recommend test data sets\n\n4. **Feature Testing**:\n   - Create end-to-end tests for the complete feature\n   - Generate user acceptance test scenarios\n   - Add regression tests to prevent future breaks\n\nPlease provide optimized code and comprehensive test suites that cover all cases including happy path, error conditions, edge cases, and performance scenarios."
+  }
+}

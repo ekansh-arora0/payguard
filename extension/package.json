@@ -1,0 +1,33 @@
+{
+  "name": "payguard-extension",
+  "version": "2.0.0",
+  "description": "PayGuard V2 - Privacy-first scam protection browser extension",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "scripts": {
+    "build": "tsc",
+    "watch": "tsc --watch",
+    "test": "jest",
+    "test:watch": "jest --watch",
+    "lint": "eslint src/**/*.ts",
+    "clean": "rm -rf dist"
+  },
+  "keywords": [
+    "payguard",
+    "security",
+    "phishing",
+    "scam-protection",
+    "browser-extension"
+  ],
+  "author": "PayGuard Team",
+  "license": "MIT",
+  "devDependencies": {
+    "@types/chrome": "^0.0.268",
+    "@types/jest": "^29.5.12",
+    "@types/node": "^20.14.0",
+    "fast-check": "^3.19.0",
+    "jest": "^29.7.0",
+    "ts-jest": "^29.1.4",
+    "typescript": "^5.4.5"
+  }
+}

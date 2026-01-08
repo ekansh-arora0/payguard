@@ -1,0 +1,200 @@
+[
+  {
+    "test": "Backend Health Check",
+    "status": "PASS",
+    "details": "Backend is running",
+    "timestamp": "2026-01-06T16:18:02.697731"
+  },
+  {
+    "test": "API Endpoint /api/health",
+    "status": "PASS",
+    "details": "Status: 200",
+    "timestamp": "2026-01-06T16:18:02.700249"
+  },
+  {
+    "test": "API Endpoint /api/stats",
+    "status": "PASS",
+    "details": "Status: 404",
+    "timestamp": "2026-01-06T16:18:02.702032"
+  },
+  {
+    "test": "API Endpoint /api/merchants",
+    "status": "PASS",
+    "details": "Status: 404",
+    "timestamp": "2026-01-06T16:18:02.703596"
+  },
+  {
+    "test": "API Endpoint /api/fraud-reports",
+    "status": "PASS",
+    "details": "Status: 404",
+    "timestamp": "2026-01-06T16:18:02.705306"
+  },
+  {
+    "test": "URL Risk Analysis: https://microsoft.com",
+    "status": "FAIL",
+    "details": "Status: 404",
+    "timestamp": "2026-01-06T16:18:02.706750"
+  },
+  {
+    "test": "URL Risk Analysis: https://micr0soft-security.xyz",
+    "status": "FAIL",
+    "details": "Status: 404",
+    "timestamp": "2026-01-06T16:18:02.707931"
+  },
+  {
+    "test": "URL Risk Analysis: https://paypal-verify.suspicious-domain.com",
+    "status": "FAIL",
+    "details": "Status: 404",
+    "timestamp": "2026-01-06T16:18:02.709050"
+  },
+  {
+    "test": "URL Risk Analysis: https://google.com",
+    "status": "FAIL",
+    "details": "Status: 404",
+    "timestamp": "2026-01-06T16:18:02.710348"
+  },
+  {
+    "test": "Email Typosquatting: support@microsoft.com",
+    "status": "FAIL",
+    "details": "Status: 404",
+    "timestamp": "2026-01-06T16:18:02.711544"
+  },
+  {
+    "test": "Email Typosquatting: support@micr0soft.com",
+    "status": "FAIL",
+    "details": "Status: 404",
+    "timestamp": "2026-01-06T16:18:02.712618"
+  },
+  {
+    "test": "Email Typosquatting: security@paypal-verify.xyz",
+    "status": "FAIL",
+    "details": "Status: 404",
+    "timestamp": "2026-01-06T16:18:02.713718"
+  },
+  {
+    "test": "Email Typosquatting: noreply@g00gle.com",
+    "status": "FAIL",
+    "details": "Status: 404",
+    "timestamp": "2026-01-06T16:18:02.715415"
+  },
+  {
+    "test": "Email Typosquatting: admin@apple-security.support",
+    "status": "FAIL",
+    "details": "Status: 404",
+    "timestamp": "2026-01-06T16:18:02.716998"
+  },
+  {
+    "test": "AI Image Detection",
+    "status": "PASS",
+    "details": "Score: 0, Color: low, Reasons: 0",
+    "timestamp": "2026-01-06T16:18:02.775742"
+  },
+  {
+    "test": "Payment Gateway Detection: stripe",
+    "status": "FAIL",
+    "details": "Status: 404",
+    "timestamp": "2026-01-06T16:18:02.777183"
+  },
+  {
+    "test": "Payment Gateway Detection: paypal",
+    "status": "FAIL",
+    "details": "Status: 404",
+    "timestamp": "2026-01-06T16:18:02.778586"
+  },
+  {
+    "test": "Payment Gateway Detection: square",
+    "status": "FAIL",
+    "details": "Status: 404",
+    "timestamp": "2026-01-06T16:18:02.779808"
+  },
+  {
+    "test": "Payment Gateway Detection: crypto",
+    "status": "FAIL",
+    "details": "Status: 404",
+    "timestamp": "2026-01-06T16:18:02.781093"
+  },
+  {
+    "test": "SMS Scam Detection",
+    "status": "FAIL",
+    "details": "Status: 404",
+    "timestamp": "2026-01-06T16:18:02.782466"
+  },
+  {
+    "test": "SMS Scam Detection",
+    "status": "FAIL",
+    "details": "Status: 404",
+    "timestamp": "2026-01-06T16:18:02.783701"
+  },
+  {
+    "test": "SMS Scam Detection",
+    "status": "FAIL",
+    "details": "Status: 404",
+    "timestamp": "2026-01-06T16:18:02.784826"
+  },
+  {
+    "test": "SMS Scam Detection",
+    "status": "FAIL",
+    "details": "Status: 404",
+    "timestamp": "2026-01-06T16:18:02.786266"
+  },
+  {
+    "test": "Merchant Creation",
+    "status": "FAIL",
+    "details": "Status: 404",
+    "timestamp": "2026-01-06T16:18:02.788051"
+  },
+  {
+    "test": "API Key Creation",
+    "status": "FAIL",
+    "details": "Status: 404",
+    "timestamp": "2026-01-06T16:18:02.789488"
+  },
+  {
+    "test": "Transaction Risk: amazon.com",
+    "status": "FAIL",
+    "details": "Status: 404",
+    "timestamp": "2026-01-06T16:18:02.790685"
+  },
+  {
+    "test": "Transaction Risk: suspicious-store.xyz",
+    "status": "FAIL",
+    "details": "Status: 404",
+    "timestamp": "2026-01-06T16:18:02.791954"
+  },
+  {
+    "test": "Transaction Risk: paypal.com",
+    "status": "FAIL",
+    "details": "Status: 404",
+    "timestamp": "2026-01-06T16:18:02.793103"
+  },
+  {
+    "test": "Visual Scam Pattern 1",
+    "status": "FAIL",
+    "details": "Status: 404",
+    "timestamp": "2026-01-06T16:18:02.794336"
+  },
+  {
+    "test": "Visual Scam Pattern 2",
+    "status": "FAIL",
+    "details": "Status: 404",
+    "timestamp": "2026-01-06T16:18:02.795454"
+  },
+  {
+    "test": "Visual Scam Pattern 3",
+    "status": "FAIL",
+    "details": "Status: 404",
+    "timestamp": "2026-01-06T16:18:02.796515"
+  },
+  {
+    "test": "Visual Scam Pattern 4",
+    "status": "FAIL",
+    "details": "Status: 404",
+    "timestamp": "2026-01-06T16:18:02.797528"
+  },
+  {
+    "test": "PayGuard Agent Status",
+    "status": "PASS",
+    "details": "Agent running (PID: 18354)",
+    "timestamp": "2026-01-06T16:18:02.820847"
+  }
+]
