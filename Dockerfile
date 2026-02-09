@@ -30,8 +30,11 @@ COPY requirements.txt /app/
 RUN pip install --no-cache-dir torch==2.0.1 torchvision==0.15.2
 RUN pip install --no-cache-dir -r requirements.txt
 
-# Install playwright browsers and their system dependencies
-RUN playwright install chromium && playwright install-deps chromium
+# Install playwright browsers (optional, ~400MB; set to "false" to skip)
+ARG INSTALL_PLAYWRIGHT=true
+RUN if [ "$INSTALL_PLAYWRIGHT" = "true" ]; then \
+      playwright install chromium && playwright install-deps chromium; \
+    fi
 
 # Copy the current directory contents into the container at /app
 COPY . /app/

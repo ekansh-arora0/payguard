@@ -67,11 +67,16 @@ jobs:
     - name: Install dependencies
       run: |
         python -m pip install --upgrade pip
-        pip install pytest pillow requests aiohttp httpx
+        pip install -r requirements.txt
+        pip install pytest pytest-asyncio
     
     - name: Run unit tests
+      env:
+        MONGO_URL: mongodb://localhost:27017
+        DB_NAME: payguard_test
+        ENTERPRISE_API_TOKEN: ci-test-token
       run: |
-        python -m pytest test_simple_unit.py -v --tb=short -x
+        python -m pytest test_simple_unit.py tests/test_auth.py tests/test_risk_engine.py tests/test_server.py tests/test_enterprise.py -v --tb=short -x --override-ini="addopts="
       continue-on-error: false
 
   test-typescript:

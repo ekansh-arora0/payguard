@@ -1855,8 +1855,7 @@ class RiskScoringEngine:
                     logger.debug(f"DIRE exception: {e}")
                     p_dire = None
                 finally:
-        self._dire_busy = False
-        self._dire_lock = asyncio.Lock()
+                    self._dire_busy = False
 
             if p_dire is None:
                 return 0.0

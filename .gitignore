@@ -84,7 +84,7 @@ bert_phishing_detector/
 ml/
 models/
 docs/
-tests/
+
 *.log
 .DS_Store
 node_modules/
