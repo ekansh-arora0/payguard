@@ -177,8 +177,8 @@ class RiskScoringEngine:
                 if default_model.exists():
                     self.dire_model_path = default_model
             
-            print(f"   [RiskEngine] DIRE Home: {self.dire_home}")
-            print(f"   [RiskEngine] DIRE Model: {self.dire_model_path}")
+            logger.debug(f"DIRE Home: {self.dire_home}")
+            logger.debug(f"DIRE Model: {self.dire_model_path}")
         except Exception:
             pass
 
@@ -202,6 +202,7 @@ class RiskScoringEngine:
         if self.ml_model and self.ml_scaler is not None:
             risk_factors = []
             safety_indicators = []
+            trust_score = 50.0  # Initialize before any conditional usage
             ssl_valid = self._check_ssl(domain)
             if not ssl_valid:
                 try:
@@ -598,6 +599,7 @@ class RiskScoringEngine:
                         html = None
                     import re as _re
                     urls = []
+                    html = html or ""
                     urls.extend(_re.findall(r'<img[^>]+src=["\']([^"\']+)["\']', html, flags=_re.I))
                     urls.extend(_re.findall(r'<img[^>]+data-src=["\']([^"\']+)["\']', html, flags=_re.I))
                     meta = _re.findall(r'<meta[^>]+property=["\']og:image["\'][^>]+content=["\']([^"\']+)["\']', html, flags=_re.I)
@@ -889,7 +891,7 @@ class RiskScoringEngine:
             text = _ocr_all(img, is_static=static)
             if text:
                 text_sample = text[:50].replace('\n', ' ')
-                print(f"   [RiskEngine] OCR Text Sample: {text_sample}...")
+                logger.debug(f"OCR Text Sample: {text_sample}...")
             if not text:
                 return result
             
@@ -1061,7 +1063,7 @@ class RiskScoringEngine:
             
             # Debug: Print found patterns
             if patterns_found:
-                print(f"   [RiskEngine] Patterns: {patterns_found} | Score: {confidence_score}")
+                logger.debug(f"Patterns: {patterns_found} | Score: {confidence_score}")
 
             # Rule 0: Suspicious email address detected
             if email_scams:
@@ -1122,13 +1124,13 @@ class RiskScoringEngine:
                 confidence_score -= 50
                 if confidence_score < 75:
                     is_scam = False
-                print(f"   [RiskEngine] Legitimate UI detected, applying -50 penalty. New Score: {confidence_score}")
+                logger.debug(f"Legitimate UI detected, applying -50 penalty. New Score: {confidence_score}")
             
             if len(tl) < 40:
                 confidence_score -= 20
                 if confidence_score < 75:
                     is_scam = False
-                print(f"   [RiskEngine] Text too short, applying -20 penalty. New Score: {confidence_score}")
+                logger.debug(f"Text too short, applying -20 penalty. New Score: {confidence_score}")
             
             # Cap confidence at 100
             confidence_score = min(confidence_score, 100)
@@ -1178,14 +1180,54 @@ class RiskScoringEngine:
             tl = (text or "").lower()
             tl_norm = _re.sub(r"[^a-z0-9\s]", " ", tl)
             tl_norm = _re.sub(r"\s+", " ", tl_norm).strip()
-            virus_words = ['virus','malware','spyware','adware','trojan','worm','keylogger','ransomware','infection','infected','threat']
-            scare_phrases = ['your computer has a virus','your pc is infected','your mac is infected','device is infected','critical alert','security alert','security warning','threats found','system is heavily damaged','browser has been locked','your computer is blocked','your pc is blocked','your mac is blocked','system error','critical error','fatal error','your system is at risk','severe damage','hard drive failure','data breach detected','hacked','account suspended','account locked','unauthorized login','suspicious activity']
-            action_phrases = ['call support','call microsoft','call apple','call customer support','toll free','do not close','contact support','immediate action required','click allow','click ok','download antivirus','install antivirus','update required','pay a fine','verify your computer','run a scan now','renew your subscription','click here to fix','update now','activate now','confirm your identity','verify account','sign in to','log in to verify','claim your prize','claim reward']
-            payment_phrases = ['pay now','payment required','enter credit card','gift card','bitcoin','cryptocurrency','wire transfer','send money','pay a fee','subscription fee','renewal fee','activation fee','update payment info','update billing','billing information']
-            urgency_indicators = ['expires in','limited time','act now','within 24 hours','immediately','urgent','time sensitive','before it','will be deleted','will expire','last chance','final warning','asap']
-            brands = ['microsoft','apple','windows','macos','google','norton','mcafee','totalav','avg','avast','kaspersky','bitdefender','amazon','paypal','facebook','netflix','bank']
-            phishing_phrases = ['verify account','confirm your identity','update your account','reset your password','unusual activity','suspicious activity','unlock your account','confirm your password','sign in to verify','click to verify']
-            input_labels = ['password','credit card','ssn','social security','cvv','security code','routing number','account number','passcode']
+            virus_words = [
+                'virus', 'malware', 'spyware', 'adware', 'trojan', 'worm',
+                'keylogger', 'ransomware', 'infection', 'infected', 'threat',
+            ]
+            scare_phrases = [
+                'your computer has a virus', 'your pc is infected', 'your mac is infected',
+                'device is infected', 'critical alert', 'security alert', 'security warning',
+                'threats found', 'system is heavily damaged', 'browser has been locked',
+                'your computer is blocked', 'your pc is blocked', 'your mac is blocked',
+                'system error', 'critical error', 'fatal error', 'your system is at risk',
+                'severe damage', 'hard drive failure', 'data breach detected', 'hacked',
+                'account suspended', 'account locked', 'unauthorized login', 'suspicious activity',
+            ]
+            action_phrases = [
+                'call support', 'call microsoft', 'call apple', 'call customer support',
+                'toll free', 'do not close', 'contact support', 'immediate action required',
+                'click allow', 'click ok', 'download antivirus', 'install antivirus',
+                'update required', 'pay a fine', 'verify your computer', 'run a scan now',
+                'renew your subscription', 'click here to fix', 'update now', 'activate now',
+                'confirm your identity', 'verify account', 'sign in to', 'log in to verify',
+                'claim your prize', 'claim reward',
+            ]
+            payment_phrases = [
+                'pay now', 'payment required', 'enter credit card', 'gift card',
+                'bitcoin', 'cryptocurrency', 'wire transfer', 'send money',
+                'pay a fee', 'subscription fee', 'renewal fee', 'activation fee',
+                'update payment info', 'update billing', 'billing information',
+            ]
+            urgency_indicators = [
+                'expires in', 'limited time', 'act now', 'within 24 hours',
+                'immediately', 'urgent', 'time sensitive', 'before it',
+                'will be deleted', 'will expire', 'last chance', 'final warning', 'asap',
+            ]
+            brands = [
+                'microsoft', 'apple', 'windows', 'macos', 'google', 'norton',
+                'mcafee', 'totalav', 'avg', 'avast', 'kaspersky', 'bitdefender',
+                'amazon', 'paypal', 'facebook', 'netflix', 'bank',
+            ]
+            phishing_phrases = [
+                'verify account', 'confirm your identity', 'update your account',
+                'reset your password', 'unusual activity', 'suspicious activity',
+                'unlock your account', 'confirm your password', 'sign in to verify',
+                'click to verify',
+            ]
+            input_labels = [
+                'password', 'credit card', 'ssn', 'social security', 'cvv',
+                'security code', 'routing number', 'account number', 'passcode',
+            ]
             phone_pat = _re.compile(r"(call|dial|phone|contact)\s*(us\s*)?(at\s*)?(\+?1?\s*)?(\(?\d{3}\)?[\s\-]?\d{3}[\s\-]?\d{4})")
             error_pat = _re.compile(r"error\s*(code|#|number)?\s*[0x]*[0-9a-f\-]+", _re.I)
             extra_raw = _os.environ.get('PAYGUARD_SCAM_PHRASES', '')
@@ -1504,9 +1546,9 @@ class RiskScoringEngine:
                                     cn = v
                     except Exception:
                         cn = None
-                    sans = [v for (k, v) in cert.get('subjectAltName', []) if k == 'DNS']
+                    sans = [v for (k, v) in cert.get('subjectAltName', []) if k == 'DNS']  # type: ignore[misc]
                     cn_match = bool(cn and cn.lower() == domain.lower())
-                    san_match = any(domain.lower() == s.lower() or domain.lower().endswith('.'+s.lower()) for s in sans)
+                    san_match = any(domain.lower() == str(s).lower() or domain.lower().endswith('.' + str(s).lower()) for s in sans)  # type: ignore[union-attr]
                     return True, cn_match, san_match
         except Exception:
             return False, False, False
@@ -1580,7 +1622,7 @@ class RiskScoringEngine:
     async def _run_blocking(self, fn):
         """Run blocking function in thread to avoid blocking event loop"""
         import asyncio
-        loop = asyncio.get_event_loop()
+        loop = asyncio.get_running_loop()
         return await loop.run_in_executor(None, fn)
     
     def _generate_education_message(self, risk_level: RiskLevel, risk_factors: List[str], 
@@ -1757,7 +1799,7 @@ class RiskScoringEngine:
                     if w < 128 or h < 128:
                         return 0.0
                 except Exception as e:
-                    print(f"   [RiskEngine] Image load error: {e}")
+                    logger.debug(f"Image load error: {e}")
                     return 0.0
                 
                 try:
@@ -1777,7 +1819,7 @@ class RiskScoringEngine:
                                '-f', tmp_path, '-m', str(self.dire_model_path), '--use_cpu']
                     
                     # Log the command being run
-                    print(f"   [RiskEngine] Running DIRE: {' '.join(cmd)}")
+                    logger.debug(f"Running DIRE: {' '.join(cmd)}")
                     
                     out = _sp.run(cmd, stdout=_sp.PIPE, stderr=_sp.PIPE, timeout=20)
                     _os.unlink(tmp_path)
@@ -1786,7 +1828,7 @@ class RiskScoringEngine:
                     err = (out.stderr or b'').decode('utf-8', errors='ignore')
                     
                     if out.returncode != 0:
-                        print(f"   [RiskEngine] DIRE Error (code {out.returncode}): {err[:100]}")
+                        logger.debug(f"DIRE Error (code {out.returncode}): {err[:100]}")
                     
                     import re as _re
                     m = _re.search(r"prob[^0-9]*([0-9]*\.?[0-9]+)", txt, _re.I)
@@ -1794,16 +1836,16 @@ class RiskScoringEngine:
                         p_dire = float(m.group(1))
                         if p_dire > 1.0:
                             p_dire = p_dire / 100.0
-                        print(f"   [RiskEngine] DIRE Result: {p_dire:.4f}")
+                        logger.debug(f"DIRE Result: {p_dire:.4f}")
                     else:
                         if ('fake' in txt.lower()) or ('generated' in txt.lower()) or ('synthetic' in txt.lower()):
                             p_dire = 0.8
-                            print(f"   [RiskEngine] DIRE Result (text-match): {p_dire}")
+                            logger.debug(f"DIRE Result (text-match): {p_dire}")
                         elif ('real' in txt.lower()):
                             p_dire = 0.2
-                            print(f"   [RiskEngine] DIRE Result (text-match): {p_dire}")
+                            logger.debug(f"DIRE Result (text-match): {p_dire}")
                 except Exception as e:
-                    print(f"   [RiskEngine] DIRE exception: {e}")
+                    logger.debug(f"DIRE exception: {e}")
                     p_dire = None
                 finally:
                     self._dire_busy = False

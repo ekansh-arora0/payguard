@@ -89,7 +89,12 @@ class Organization:
 class EnterpriseDB:
     """SQLite database for enterprise features"""
     
-    def __init__(self, db_path: str = "/Users/ekans/payguard/enterprise/payguard_enterprise.db"):
+    def __init__(self, db_path: str = None):
+        if db_path is None:
+            db_path = os.environ.get(
+                'ENTERPRISE_DB_PATH',
+                str(Path(__file__).parent / "enterprise" / "payguard_enterprise.db")
+            )
         self.db_path = db_path
         Path(db_path).parent.mkdir(parents=True, exist_ok=True)
         self._init_db()
@@ -308,8 +313,14 @@ class GmailIntegration:
     SCOPES = ['https://www.googleapis.com/auth/gmail.readonly']
     
     def __init__(self, credentials_path: str = None):
-        self.credentials_path = credentials_path or '/Users/ekans/payguard/enterprise/gmail_credentials.json'
-        self.token_path = '/Users/ekans/payguard/enterprise/gmail_token.json'
+        self.credentials_path = credentials_path or os.environ.get(
+            'GMAIL_CREDENTIALS_PATH',
+            str(Path(__file__).parent / "enterprise" / "gmail_credentials.json")
+        )
+        self.token_path = os.environ.get(
+            'GMAIL_TOKEN_PATH',
+            str(Path(__file__).parent / "enterprise" / "gmail_token.json")
+        )
         self.service = None
     
     def authenticate(self) -> bool:
@@ -456,7 +467,10 @@ class MobilePushService:
     
     def __init__(self):
         self.webhook_urls: Dict[str, str] = {}  # user_id -> webhook
-        self.config_path = Path('/Users/ekans/payguard/enterprise/push_config.json')
+        self.config_path = Path(os.environ.get(
+            'PUSH_CONFIG_PATH',
+            str(Path(__file__).parent / "enterprise" / "push_config.json")
+        ))
         self._load_config()
     
     def _load_config(self):
@@ -699,7 +713,8 @@ def create_demo_data():
         ''', ('demo', 'Demo Corporation', 'demo.com', 'enterprise', datetime.now().isoformat()))
         conn.commit()
         conn.close()
-    except:
+    except Exception:
+        logging.getLogger(__name__).debug("Failed to create demo org row (may already exist)")
         pass
     
     # Create demo alerts
@@ -739,7 +754,9 @@ def main():
         print("   API docs:  http://localhost:8003/docs")
         print("\nPress Ctrl+C to stop\n")
         
-        uvicorn.run(app, host="0.0.0.0", port=8003, log_level="info")
+        host = os.environ.get("ENTERPRISE_HOST", "127.0.0.1")
+        port = int(os.environ.get("ENTERPRISE_PORT", "8003"))
+        uvicorn.run(app, host=host, port=port, log_level="info")
     else:
         print("\n⚠️  FastAPI not installed")
         print("   Run: pip install fastapi uvicorn aiohttp")

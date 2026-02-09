@@ -93,8 +93,8 @@ async def check_risk(
         # Calculate risk using engine with HTML content to power content ML
         html = None
         try:
-            async with httpx.AsyncClient(timeout=3.0) as client:
-                resp = await client.get(request.url, headers={"User-Agent": "PayGuard/1.0"}, follow_redirects=True)
+            async with httpx.AsyncClient(timeout=3.0) as http_client:
+                resp = await http_client.get(request.url, headers={"User-Agent": "PayGuard/1.0"}, follow_redirects=True)
                 if resp.status_code < 500:
                     html = resp.text[:100000]
         except Exception:
@@ -129,7 +129,7 @@ async def check_risk(
         
     except Exception as e:
         logger.error(f"Error checking risk: {str(e)}")
-        raise HTTPException(status_code=500, detail=f"Risk check failed: {str(e)}")
+        raise HTTPException(status_code=500, detail="Risk check failed")
 
 @api_router.get("/risk", response_model=RiskScore)
 async def get_risk_by_url(
@@ -153,8 +153,8 @@ async def get_risk_by_url(
         
         html = None
         try:
-            async with httpx.AsyncClient(timeout=3.0) as client:
-                resp = await client.get(url, headers={"User-Agent": "PayGuard/1.0"}, follow_redirects=True)
+            async with httpx.AsyncClient(timeout=3.0) as http_client:
+                resp = await http_client.get(url, headers={"User-Agent": "PayGuard/1.0"}, follow_redirects=True)
                 if resp.status_code < 500:
                     html = resp.text[:100000]
         except Exception:
@@ -175,7 +175,7 @@ async def get_risk_by_url(
         
     except Exception as e:
         logger.error(f"Error getting risk: {str(e)}")
-        raise HTTPException(status_code=500, detail=str(e))
+        raise HTTPException(status_code=500, detail="Failed to get risk score")
 
 # ============= Merchant Management =============
 
@@ -197,7 +197,7 @@ async def get_merchant_history(
         
     except Exception as e:
         logger.error(f"Error getting merchant history: {str(e)}")
-        raise HTTPException(status_code=500, detail=str(e))
+        raise HTTPException(status_code=500, detail="Failed to get merchant history")
 
 @api_router.get("/merchant/{domain}", response_model=Merchant)
 async def get_merchant(
@@ -220,7 +220,7 @@ async def get_merchant(
         raise
     except Exception as e:
         logger.error(f"Error getting merchant: {str(e)}")
-        raise HTTPException(status_code=500, detail=str(e))
+        raise HTTPException(status_code=500, detail="Failed to get merchant")
 
 @api_router.post("/merchant", response_model=Merchant)
 async def create_merchant(
@@ -243,7 +243,7 @@ async def create_merchant(
         
     except Exception as e:
         logger.error(f"Error creating merchant: {str(e)}")
-        raise HTTPException(status_code=500, detail=str(e))
+        raise HTTPException(status_code=500, detail="Failed to create merchant")
 
 # ============= Transaction Checks =============
 
@@ -313,7 +313,7 @@ async def check_transaction(
         
     except Exception as e:
         logger.error(f"Error checking transaction: {str(e)}")
-        raise HTTPException(status_code=500, detail=str(e))
+        raise HTTPException(status_code=500, detail="Failed to check transaction")
 
 # ============= Fraud Reporting =============
 
@@ -343,7 +343,7 @@ async def report_fraud(
         
     except Exception as e:
         logger.error(f"Error reporting fraud: {str(e)}")
-        raise HTTPException(status_code=500, detail=str(e))
+        raise HTTPException(status_code=500, detail="Failed to submit fraud report")
 
 @api_router.get("/fraud/reports", response_model=List[FraudReport])
 async def get_fraud_reports(
@@ -362,7 +362,7 @@ async def get_fraud_reports(
         
     except Exception as e:
         logger.error(f"Error getting fraud reports: {str(e)}")
-        raise HTTPException(status_code=500, detail=str(e))
+        raise HTTPException(status_code=500, detail="Failed to get fraud reports")
 
 # ============= Custom Rules for Institutions =============
 
@@ -389,7 +389,7 @@ async def create_custom_rule(
         
     except Exception as e:
         logger.error(f"Error creating custom rule: {str(e)}")
-        raise HTTPException(status_code=500, detail=str(e))
+        raise HTTPException(status_code=500, detail="Failed to create custom rule")
 
 @api_router.get("/institution/custom-rules", response_model=List[CustomRule])
 async def get_custom_rules(
@@ -406,7 +406,7 @@ async def get_custom_rules(
         
     except Exception as e:
         logger.error(f"Error getting custom rules: {str(e)}")
-        raise HTTPException(status_code=500, detail=str(e))
+        raise HTTPException(status_code=500, detail="Failed to get custom rules")
 
 # ============= API Key Management =============
 
@@ -425,7 +425,7 @@ async def generate_api_key(request: APIKeyCreate):
         
     except Exception as e:
         logger.error(f"Error generating API key: {str(e)}")
-        raise HTTPException(status_code=500, detail=str(e))
+        raise HTTPException(status_code=500, detail="Failed to generate API key")
 
 # ============= Media Risk =============
 @api_router.get("/media-risk", response_model=MediaRisk)
@@ -453,7 +453,7 @@ async def get_media_risk(url: str, force: Optional[bool] = False, api_key: Optio
         return media
     except Exception as e:
         logger.error(f"Error getting media risk: {str(e)}")
-        raise HTTPException(status_code=500, detail=str(e))
+        raise HTTPException(status_code=500, detail="Failed to get media risk")
 
 @api_router.post("/media-risk-image", response_model=MediaRisk)
 async def post_media_risk_image(file: UploadFile = File(...), api_key: Optional[str] = Depends(get_api_key)):
@@ -462,16 +462,22 @@ async def post_media_risk_image(file: UploadFile = File(...), api_key: Optional[
         if api_key:
             await api_key_manager.validate_api_key(api_key)
         b = await file.read()
-        static = bool(payload.get('static', False))
-        p = None
-        score = 0.0
-        color = RiskLevel.LOW
+        p = risk_engine._predict_image_fake_bytes(b)
+        if p is None:
+            score = 0.0
+            p = 0.0
+        else:
+            score = float(p) * 100.0
+        color = RiskLevel.HIGH if score >= 80 else (RiskLevel.MEDIUM if score >= 60 else RiskLevel.LOW)
+        reasons = []
+        if p >= 0.8:
+            reasons.append("Image appears AI-generated")
         media = MediaRisk(
             url="uploaded",
             domain="local",
             media_score=round(score, 1),
             media_color=color,
-            reasons=(["Image appears AI-generated"] if p >= 0.8 else []),
+            reasons=reasons,
             image_fake_prob=round(score, 1)
         )
         await db.metrics.insert_one({
@@ -486,7 +492,7 @@ async def post_media_risk_image(file: UploadFile = File(...), api_key: Optional[
         raise
     except Exception as e:
         logger.error(f"Error processing uploaded image: {str(e)}")
-        raise HTTPException(status_code=500, detail=str(e))
+        raise HTTPException(status_code=500, detail="Failed to process uploaded image")
 
 @api_router.get("/media-risk-screen", response_model=MediaRisk)
 async def get_media_risk_screen(api_key: Optional[str] = Depends(get_api_key)):
@@ -570,7 +576,7 @@ async def get_media_risk_screen(api_key: Optional[str] = Depends(get_api_key)):
         raise
     except Exception as e:
         logger.error(f"Error capturing screen: {str(e)}")
-        raise HTTPException(status_code=500, detail=str(e))
+        raise HTTPException(status_code=500, detail="Failed to capture screen")
 
 @api_router.post("/media-risk/bytes", response_model=MediaRisk)
 async def post_media_risk_bytes(
@@ -590,9 +596,13 @@ async def post_media_risk_bytes(
         try:
             # Handle potential padding issues or header prefixes
             b64_str = request.content
+            if not b64_str:
+                raise HTTPException(status_code=400, detail="Missing content field")
             if "," in b64_str:
                 b64_str = b64_str.split(",")[1]
             b = base64.b64decode(b64_str)
+        except HTTPException:
+            raise
         except Exception as e:
             logger.error(f"Base64 decode error: {e}")
             raise HTTPException(status_code=400, detail="Invalid base64 content")
@@ -657,11 +667,11 @@ async def post_media_risk_bytes(
         })
         
         return media
+    except HTTPException:
+        raise
     except Exception as e:
         logger.error(f"Error processing media bytes: {str(e)}")
-        import traceback
-        traceback.print_exc()
-        raise HTTPException(status_code=500, detail=str(e))
+        raise HTTPException(status_code=500, detail="Failed to process media")
 
 # ============= Statistics =============
 
@@ -694,7 +704,7 @@ async def get_stats(api_key: Optional[str] = Depends(get_api_key)):
         
     except Exception as e:
         logger.error(f"Error getting stats: {str(e)}")
-        raise HTTPException(status_code=500, detail=str(e))
+        raise HTTPException(status_code=500, detail="Failed to get stats")
 
 # ============= Helper Functions =============
 
@@ -733,10 +743,21 @@ async def _update_merchant_record(risk_score: RiskScore):
         logger.error(f"Error updating merchant record: {str(e)}")
 
 
+from .api_gateway import HSTSMiddleware
+
+# Security: HSTS headers on all responses
+app.add_middleware(HSTSMiddleware)
+
+# CORS: Restrict origins via env var, default to localhost for dev
+_allowed_origins = os.environ.get(
+    "ALLOWED_ORIGINS",
+    "http://localhost:3000,http://127.0.0.1:3000,http://localhost:8002,http://127.0.0.1:8002"
+).split(",")
+
 app.add_middleware(
     CORSMiddleware,
     allow_credentials=True,
-    allow_origins=["*"],
+    allow_origins=[o.strip() for o in _allowed_origins],
     allow_methods=["*"],
     allow_headers=["*"],
 )
@@ -758,7 +779,7 @@ async def submit_label_feedback(
         return doc
     except Exception as e:
         logger.error(f"Error submitting label feedback: {str(e)}")
-        raise HTTPException(status_code=500, detail=str(e))
+        raise HTTPException(status_code=500, detail="Failed to submit feedback")
 @api_router.post("/risk/content", response_model=RiskScore)
 async def check_risk_with_content(
     request: ContentRiskRequest,
@@ -777,8 +798,8 @@ async def check_risk_with_content(
             return RiskScore(**recent_check)
         html = request.html
         if html is None and request.url:
-            async with httpx.AsyncClient(timeout=5.0) as client:
-                resp = await client.get(request.url, headers={"User-Agent": "PayGuard/1.0"})
+            async with httpx.AsyncClient(timeout=5.0) as http_client:
+                resp = await http_client.get(request.url, headers={"User-Agent": "PayGuard/1.0"})
                 resp.raise_for_status()
                 html = resp.text[:100000]
         risk_score = await risk_engine.calculate_risk(request.url, content=html)
@@ -795,7 +816,7 @@ async def check_risk_with_content(
         return risk_score
     except Exception as e:
         logger.error(f"Error checking risk with content: {str(e)}")
-        raise HTTPException(status_code=500, detail=str(e))
+        raise HTTPException(status_code=500, detail="Failed to check content risk")
 @api_router.get("/fast-validate")
 async def fast_validate(url: str):
     try:
@@ -803,112 +824,7 @@ async def fast_validate(url: str):
         return res
     except Exception as e:
         logger.error(f"Error fast validating: {str(e)}")
-        raise HTTPException(status_code=500, detail=str(e))
-
-# Include router in app (after all routes are defined)
-
-@api_router.post("/media-risk/bytes", response_model=MediaRisk)
-async def media_risk_bytes(payload: dict, api_key: Optional[str] = Depends(get_api_key)):
-    try:
-        t0 = time.time()
-        if api_key:
-            await api_key_manager.validate_api_key(api_key)
-        import base64
-        b64 = payload.get('image_b64') or ''
-        try:
-            b = base64.b64decode(b64)
-        except Exception:
-            raise HTTPException(status_code=400, detail="Invalid image data")
-        static = bool(payload.get('static', False))
-        p = None
-        score = 0.0
-        color = RiskLevel.LOW
-        reasons = []
-        # 1. Text Analysis (Fastest)
-        scam_result = risk_engine._screen_text_alerts(b)
-        
-        # 2. Visual Cues (Fast)
-        cues = risk_engine._screen_visual_cues(b)
-        if cues.get('visual_scam_cues'):
-            reasons.append(f"Large red/orange/yellow blocks detected (R:{cues.get('red_ratio')} O:{cues.get('orange_ratio')} Y:{cues.get('yellow_ratio')})")
-            
-        # 3. AI Prediction (Slow - only run if text doesn't already trigger a high-risk alert)
-        is_scam_from_text = scam_result.get("is_scam")
-        
-        # Optimization: Only run heavy AI checks if:
-        # a) It's a static image request (like clipboard)
-        # b) OR there's no immediate text-based scam found
-        if static or not is_scam_from_text:
-            p = risk_engine._predict_image_fake_bytes(b)
-            if p is not None:
-                score = float(p) * 100.0
-                try:
-                    is_logo = risk_engine._is_graphic_or_logo_bytes(b)
-                except Exception:
-                    is_logo = False
-                if p >= 0.80 and not is_logo:
-                    reasons.append("AI-generated image likely")
-        
-        scam_alert_data = None
-        if scam_result.get("is_scam"):
-            from .models import ScamAlert
-            scam_alert_data = ScamAlert(
-                is_scam=scam_result["is_scam"],
-                confidence=scam_result["confidence"],
-                detected_patterns=scam_result["detected_patterns"],
-                senior_message=scam_result["senior_message"],
-                action_advice=scam_result["action_advice"]
-            )
-            reasons.append(f"Scam detected (confidence: {scam_result['confidence']}%)")
-            color = RiskLevel.HIGH
-        else:
-            try:
-                patterns = set(scam_result.get("detected_patterns") or [])
-                key_core = {
-                    "virus_warning","scare_tactics","action_demand","payment_request","phone_number","error_code","do_not_close"
-                }
-                key_hits = bool(patterns.intersection(key_core))
-                if (cues.get('visual_scam_cues') or cues.get('visual_scam_any')) and key_hits:
-                    from .models import ScamAlert
-                    conf = max(75, scam_result.get("confidence") or 0)
-                    msg = scam_result.get("senior_message") or "STOP! This is a FAKE warning. Your computer is SAFE."
-                    adv = scam_result.get("action_advice") or "Close this window immediately. Do NOT call or pay."
-                    scam_alert_data = ScamAlert(
-                        is_scam=True,
-                        confidence=conf,
-                        detected_patterns=list(patterns),
-                        senior_message=msg,
-                        action_advice=adv
-                    )
-                    reasons.append(f"Scam detected (confidence: {conf}%)")
-                    color = RiskLevel.HIGH
-                else:
-                    # No scam alert if only visual cues are present; require text+visual synergy
-                    pass
-            except Exception:
-                pass
-        media = MediaRisk(
-            url="bytes://local",
-            domain="local",
-            media_score=round(score, 1),
-            media_color=color,
-            reasons=reasons,
-            image_fake_prob=(round(score, 1) if p is not None else None),
-            scam_alert=scam_alert_data
-        )
-        await db.metrics.insert_one({
-            "endpoint": "POST /api/media-risk/bytes",
-            "media_score": media.media_score,
-            "media_color": media.media_color.value,
-            "latency_ms": int((time.time() - t0) * 1000),
-            "timestamp": datetime.utcnow()
-        })
-        return media
-    except HTTPException:
-        raise
-    except Exception as e:
-        logger.error(f"Error in media-risk/bytes: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
+        raise HTTPException(status_code=500, detail="Failed to validate URL")
 
 # Include router in app (after all routes are defined)
 app.include_router(api_router)
