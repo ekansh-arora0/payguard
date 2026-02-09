@@ -1,4 +1,4 @@
-from fastapi import FastAPI, APIRouter, HTTPException, Depends, Security, UploadFile, File
+from fastapi import FastAPI, APIRouter, HTTPException, Depends, Security, UploadFile, File, Request
 from fastapi.security import APIKeyHeader
 from dotenv import load_dotenv
 from starlette.middleware.cors import CORSMiddleware
@@ -21,7 +21,10 @@ from .models import (
 )
 import httpx
 from .risk_engine import RiskScoringEngine
-from .auth import APIKeyManager, get_api_key
+from .auth import APIKeyManager, get_api_key, require_api_key
+
+# Maximum request body size: 10 MB
+MAX_REQUEST_BODY_SIZE = 10 * 1024 * 1024
 
 ROOT_DIR = Path(__file__).parent
 load_dotenv(ROOT_DIR / '.env')
@@ -38,14 +41,38 @@ api_key_manager = APIKeyManager(db)
 # Create the main app
 app = FastAPI(title="PayGuard API", version="1.0")
 
-# Create router with /api prefix
-api_router = APIRouter(prefix="/api")
+# Create router with /api/v1 prefix (versioned API)
+api_router = APIRouter(prefix="/api/v1")
 
-# Configure logging
-logging.basicConfig(
-    level=logging.INFO,
-    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
-)
+# Legacy /api prefix for backwards compatibility
+legacy_router = APIRouter(prefix="/api")
+
+# Configure structured logging
+LOG_LEVEL = os.environ.get("LOG_LEVEL", "INFO").upper()
+LOG_FORMAT = os.environ.get("LOG_FORMAT", "text")  # "text" or "json"
+
+if LOG_FORMAT == "json":
+    import json as _json
+
+    class _JsonFormatter(logging.Formatter):
+        def format(self, record):
+            return _json.dumps({
+                "timestamp": self.formatTime(record),
+                "level": record.levelname,
+                "logger": record.name,
+                "message": record.getMessage(),
+                "module": record.module,
+                "line": record.lineno,
+            })
+
+    _handler = logging.StreamHandler()
+    _handler.setFormatter(_JsonFormatter())
+    logging.basicConfig(level=getattr(logging, LOG_LEVEL, logging.INFO), handlers=[_handler])
+else:
+    logging.basicConfig(
+        level=getattr(logging, LOG_LEVEL, logging.INFO),
+        format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
+    )
 logger = logging.getLogger(__name__)
 
 # ============= Public Endpoints =============
@@ -76,7 +103,7 @@ async def health_check():
 @api_router.post("/risk", response_model=RiskScore)
 async def check_risk(
     request: RiskCheckRequest,
-    api_key: Optional[str] = Depends(get_api_key)
+    api_key: str = Depends(require_api_key)
 ):
     """
     Main endpoint to check risk score for a URL.
@@ -84,9 +111,7 @@ async def check_risk(
     """
     try:
         t0 = time.time()
-        # Validate API key if provided (optional for public demo)
-        if api_key:
-            await api_key_manager.validate_api_key(api_key)
+        await api_key_manager.validate_api_key(api_key)
         
         logger.info(f"Checking risk for URL: {request.url}")
         
@@ -134,13 +159,12 @@ async def check_risk(
 @api_router.get("/risk", response_model=RiskScore)
 async def get_risk_by_url(
     url: str,
-    api_key: Optional[str] = Depends(get_api_key)
+    api_key: str = Depends(require_api_key)
 ):
     """Get risk score for a URL (GET method for browser extensions)"""
     try:
         t0 = time.time()
-        if api_key:
-            await api_key_manager.validate_api_key(api_key)
+        await api_key_manager.validate_api_key(api_key)
         
         # Check if we have recent data
         recent_check = await db.risk_checks.find_one(
@@ -183,12 +207,11 @@ async def get_risk_by_url(
 async def get_merchant_history(
     domain: Optional[str] = None,
     limit: int = 50,
-    api_key: Optional[str] = Depends(get_api_key)
+    api_key: str = Depends(require_api_key)
 ):
     """Get merchant history and reputation data"""
     try:
-        if api_key:
-            await api_key_manager.validate_api_key(api_key)
+        await api_key_manager.validate_api_key(api_key)
         
         query = {"domain": domain} if domain else {}
         merchants = await db.merchants.find(query).limit(limit).to_list(limit)
@@ -202,12 +225,11 @@ async def get_merchant_history(
 @api_router.get("/merchant/{domain}", response_model=Merchant)
 async def get_merchant(
     domain: str,
-    api_key: Optional[str] = Depends(get_api_key)
+    api_key: str = Depends(require_api_key)
 ):
     """Get specific merchant details"""
     try:
-        if api_key:
-            await api_key_manager.validate_api_key(api_key)
+        await api_key_manager.validate_api_key(api_key)
         
         merchant = await db.merchants.find_one({"domain": domain})
         
@@ -320,12 +342,11 @@ async def check_transaction(
 @api_router.post("/fraud/report", response_model=FraudReport)
 async def report_fraud(
     report: FraudReportCreate,
-    api_key: Optional[str] = Depends(get_api_key)
+    api_key: str = Depends(require_api_key)
 ):
     """Submit a fraud report for a domain"""
     try:
-        if api_key:
-            await api_key_manager.validate_api_key(api_key)
+        await api_key_manager.validate_api_key(api_key)
         
         fraud_report = FraudReport(**report.dict())
         await db.fraud_reports.insert_one(fraud_report.dict())
@@ -429,11 +450,10 @@ async def generate_api_key(request: APIKeyCreate):
 
 # ============= Media Risk =============
 @api_router.get("/media-risk", response_model=MediaRisk)
-async def get_media_risk(url: str, force: Optional[bool] = False, api_key: Optional[str] = Depends(get_api_key)):
+async def get_media_risk(url: str, force: Optional[bool] = False, api_key: str = Depends(require_api_key)):
     try:
         t0 = time.time()
-        if api_key:
-            await api_key_manager.validate_api_key(api_key)
+        await api_key_manager.validate_api_key(api_key)
         recent = await db.media_checks.find_one(
             {"url": url, "checked_at": {"$gte": datetime.utcnow() - timedelta(hours=24)}},
             sort=[("checked_at", -1)]
@@ -456,11 +476,10 @@ async def get_media_risk(url: str, force: Optional[bool] = False, api_key: Optio
         raise HTTPException(status_code=500, detail="Failed to get media risk")
 
 @api_router.post("/media-risk-image", response_model=MediaRisk)
-async def post_media_risk_image(file: UploadFile = File(...), api_key: Optional[str] = Depends(get_api_key)):
+async def post_media_risk_image(file: UploadFile = File(...), api_key: str = Depends(require_api_key)):
     try:
         t0 = time.time()
-        if api_key:
-            await api_key_manager.validate_api_key(api_key)
+        await api_key_manager.validate_api_key(api_key)
         b = await file.read()
         p = risk_engine._predict_image_fake_bytes(b)
         if p is None:
@@ -495,11 +514,10 @@ async def post_media_risk_image(file: UploadFile = File(...), api_key: Optional[
         raise HTTPException(status_code=500, detail="Failed to process uploaded image")
 
 @api_router.get("/media-risk-screen", response_model=MediaRisk)
-async def get_media_risk_screen(api_key: Optional[str] = Depends(get_api_key)):
+async def get_media_risk_screen(api_key: str = Depends(require_api_key)):
     try:
         t0 = time.time()
-        if api_key:
-            await api_key_manager.validate_api_key(api_key)
+        await api_key_manager.validate_api_key(api_key)
         b = await risk_engine.capture_screen_bytes()
         if b is None:
             raise HTTPException(status_code=400, detail="Unable to capture screen")
@@ -581,7 +599,7 @@ async def get_media_risk_screen(api_key: Optional[str] = Depends(get_api_key)):
 @api_router.post("/media-risk/bytes", response_model=MediaRisk)
 async def post_media_risk_bytes(
     request: ContentRiskRequest,
-    api_key: Optional[str] = Depends(get_api_key)
+    api_key: str = Depends(require_api_key)
 ):
     """
     Endpoint for agent to send raw image bytes for risk analysis.
@@ -589,8 +607,7 @@ async def post_media_risk_bytes(
     """
     try:
         t0 = time.time()
-        if api_key:
-            await api_key_manager.validate_api_key(api_key)
+        await api_key_manager.validate_api_key(api_key)
         
         import base64
         try:
@@ -676,11 +693,10 @@ async def post_media_risk_bytes(
 # ============= Statistics =============
 
 @api_router.get("/stats", response_model=Stats)
-async def get_stats(api_key: Optional[str] = Depends(get_api_key)):
+async def get_stats(api_key: str = Depends(require_api_key)):
     """Get platform statistics"""
     try:
-        if api_key:
-            await api_key_manager.validate_api_key(api_key)
+        await api_key_manager.validate_api_key(api_key)
         
         total_checks = await db.risk_checks.count_documents({})
         high_risk_blocked = await db.risk_checks.count_documents({"risk_level": "high"})
@@ -745,6 +761,31 @@ async def _update_merchant_record(risk_score: RiskScore):
 
 from .api_gateway import HSTSMiddleware
 
+# Security: Request body size limit middleware
+from starlette.middleware.base import BaseHTTPMiddleware
+from starlette.requests import Request as StarletteRequest
+from starlette.responses import JSONResponse as StarletteJSONResponse
+
+
+class RequestSizeLimitMiddleware(BaseHTTPMiddleware):
+    """Reject requests with bodies exceeding MAX_REQUEST_BODY_SIZE."""
+
+    def __init__(self, app, max_body_size: int = MAX_REQUEST_BODY_SIZE):
+        super().__init__(app)
+        self.max_body_size = max_body_size
+
+    async def dispatch(self, request: StarletteRequest, call_next):
+        content_length = request.headers.get("content-length")
+        if content_length and int(content_length) > self.max_body_size:
+            return StarletteJSONResponse(
+                status_code=413,
+                content={"detail": "Request body too large"},
+            )
+        return await call_next(request)
+
+
+app.add_middleware(RequestSizeLimitMiddleware)
+
 # Security: HSTS headers on all responses
 app.add_middleware(HSTSMiddleware)
 
@@ -769,11 +810,10 @@ async def shutdown_db_client():
 @api_router.post("/feedback/label", response_model=LabelFeedback)
 async def submit_label_feedback(
     feedback: LabelFeedbackCreate,
-    api_key: Optional[str] = Depends(get_api_key)
+    api_key: str = Depends(require_api_key)
 ):
     try:
-        if api_key:
-            await api_key_manager.validate_api_key(api_key)
+        await api_key_manager.validate_api_key(api_key)
         doc = LabelFeedback(**feedback.dict())
         await db.labels_feedback.insert_one(doc.dict())
         return doc
@@ -783,12 +823,11 @@ async def submit_label_feedback(
 @api_router.post("/risk/content", response_model=RiskScore)
 async def check_risk_with_content(
     request: ContentRiskRequest,
-    api_key: Optional[str] = Depends(get_api_key)
+    api_key: str = Depends(require_api_key)
 ):
     try:
         t0 = time.time()
-        if api_key:
-            await api_key_manager.validate_api_key(api_key)
+        await api_key_manager.validate_api_key(api_key)
         # short-term cache to stabilize scores for dynamic pages
         recent_check = await db.risk_checks.find_one(
             {"url": request.url, "checked_at": {"$gte": datetime.utcnow() - timedelta(minutes=10)}},
@@ -826,5 +865,16 @@ async def fast_validate(url: str):
         logger.error(f"Error fast validating: {str(e)}")
         raise HTTPException(status_code=500, detail="Failed to validate URL")
 
-# Include router in app (after all routes are defined)
+# Include versioned router
 app.include_router(api_router)
+
+
+# Legacy /api/* redirect → /api/v1/*  (backwards compatibility)
+from starlette.responses import RedirectResponse
+
+
+@app.api_route("/api/{path:path}", methods=["GET", "POST", "PUT", "DELETE", "PATCH"], include_in_schema=False)
+async def legacy_api_redirect(path: str, request: Request):
+    """Redirect unversioned /api/* requests to /api/v1/*."""
+    url = request.url.replace(path=f"/api/v1/{path}")
+    return RedirectResponse(url=str(url), status_code=307)

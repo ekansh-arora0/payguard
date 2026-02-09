@@ -1,0 +1,10 @@
+# Backend development dependencies
+# Production deps are in the root requirements.txt
+-r ../requirements.txt
+
+# Dev / test / lint tools (NOT for production)
+pytest==9.0.1
+mypy==1.18.2
+flake8==7.3.0
+black==25.11.0
+isort==7.0.0

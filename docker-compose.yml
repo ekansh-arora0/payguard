@@ -3,24 +3,44 @@ services:
     image: mongo:6.0
     ports:
       - "27017:27017"
+    environment:
+      - MONGO_INITDB_ROOT_USERNAME=${MONGO_ROOT_USER:-payguard_admin}
+      - MONGO_INITDB_ROOT_PASSWORD=${MONGO_ROOT_PASSWORD:?Set MONGO_ROOT_PASSWORD in .env}
+      - MONGO_INITDB_DATABASE=payguard
     volumes:
       - mongodb_data:/data/db
     networks:
       - payguard-network
+    healthcheck:
+      test: ["CMD", "mongosh", "--eval", "db.adminCommand('ping')"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 20s
+    deploy:
+      resources:
+        limits:
+          memory: 1g
 
   backend:
     build: .
     ports:
       - "8002:8002"
     environment:
-      - MONGO_URL=mongodb://mongodb:27017
+      - MONGO_URL=mongodb://${MONGO_ROOT_USER:-payguard_admin}:${MONGO_ROOT_PASSWORD:?Set MONGO_ROOT_PASSWORD in .env}@mongodb:27017
       - DB_NAME=payguard
       - DIRE_HOME=/app/DIRE
       - DIRE_MODEL_PATH=/app/DIRE/data/exp/lsun_adm/ckpt/model_epoch_latest.pth
+      - ALLOWED_ORIGINS=${ALLOWED_ORIGINS:-http://localhost:3000,http://127.0.0.1:3000}
     depends_on:
-      - mongodb
+      mongodb:
+        condition: service_healthy
     networks:
       - payguard-network
+    deploy:
+      resources:
+        limits:
+          memory: 4g
 
 networks:
   payguard-network:

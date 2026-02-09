@@ -3,16 +3,28 @@ from fastapi.security import APIKeyHeader
 from motor.motor_asyncio import AsyncIOMotorDatabase
 import secrets
 import hashlib
+from collections import defaultdict
 from datetime import datetime, timedelta
+from typing import Dict, List
 import logging
 
 logger = logging.getLogger(__name__)
 
 api_key_header = APIKeyHeader(name="X-API-Key", auto_error=False)
 
+# Per-minute rate limits by tier
+_MINUTE_LIMITS: Dict[str, int] = {
+    "free": 60,
+    "premium": 300,
+    "enterprise": 1000,
+}
+
+
 class APIKeyManager:
     def __init__(self, db: AsyncIOMotorDatabase):
         self.db = db
+        # In-memory per-minute tracking: key_hash -> list of timestamps
+        self._minute_log: Dict[str, List[datetime]] = defaultdict(list)
     
     async def generate_api_key(self, institution_name: str, tier: str = "free") -> dict:
         """Generate a new API key for an institution"""
@@ -47,6 +59,23 @@ class APIKeyManager:
             "daily_limit": api_key_doc["daily_limit"]
         }
     
+    def _check_minute_limit(self, key_hash: str, tier: str) -> None:
+        """Check per-minute rate limit (in-memory). Raises 429 if exceeded."""
+        now = datetime.utcnow()
+        cutoff = now - timedelta(minutes=1)
+        # Prune old entries
+        self._minute_log[key_hash] = [
+            t for t in self._minute_log[key_hash] if t > cutoff
+        ]
+        limit = _MINUTE_LIMITS.get(tier, _MINUTE_LIMITS["free"])
+        if len(self._minute_log[key_hash]) >= limit:
+            raise HTTPException(
+                status_code=429,
+                detail=f"Rate limit exceeded: {limit} requests per minute",
+                headers={"Retry-After": "60"},
+            )
+        self._minute_log[key_hash].append(now)
+    
     async def validate_api_key(self, api_key: str) -> dict:
         """Validate API key and check rate limits"""
         if not api_key:
@@ -62,6 +91,11 @@ class APIKeyManager:
         if not api_key_doc.get("is_active"):
             raise HTTPException(status_code=401, detail="API key is inactive")
         
+        tier = api_key_doc.get("tier", "free")
+        
+        # Per-minute rate limit (fast, in-memory)
+        self._check_minute_limit(key_hash, tier)
+        
         # Check if we need to reset daily counter
         last_reset = api_key_doc.get("last_reset", datetime.utcnow())
         if datetime.utcnow() - last_reset > timedelta(days=1):
@@ -71,11 +105,12 @@ class APIKeyManager:
             )
             api_key_doc["requests_count"] = 0
         
-        # Check rate limit
+        # Check daily rate limit
         if api_key_doc["requests_count"] >= api_key_doc["daily_limit"]:
             raise HTTPException(
                 status_code=429, 
-                detail=f"Rate limit exceeded. Daily limit: {api_key_doc['daily_limit']}"
+                detail=f"Rate limit exceeded. Daily limit: {api_key_doc['daily_limit']}",
+                headers={"Retry-After": "3600"},
             )
         
         # Increment request count
@@ -87,5 +122,16 @@ class APIKeyManager:
         return api_key_doc
 
 async def get_api_key(api_key: str = Security(api_key_header)):
-    """Dependency for API key validation"""
+    """Dependency for API key validation – returns the raw key string (may be None)."""
+    return api_key
+
+
+async def require_api_key(api_key: str = Security(api_key_header)):
+    """Dependency that *requires* a valid API key header. Raises 401 if missing."""
+    if not api_key:
+        raise HTTPException(
+            status_code=401,
+            detail="API key required",
+            headers={"WWW-Authenticate": "ApiKey"},
+        )
     return api_key

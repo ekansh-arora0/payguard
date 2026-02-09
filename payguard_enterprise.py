@@ -103,82 +103,106 @@ class EnterpriseDB:
         conn = sqlite3.connect(self.db_path)
         cursor = conn.cursor()
         
-        # Organizations
+        # Schema version tracking for migrations
         cursor.execute('''
-            CREATE TABLE IF NOT EXISTS organizations (
-                id TEXT PRIMARY KEY,
-                name TEXT NOT NULL,
-                domain TEXT UNIQUE,
-                subscription_tier TEXT DEFAULT 'free',
-                user_count INTEGER DEFAULT 0,
-                created_at TEXT,
-                settings TEXT DEFAULT '{}'
+            CREATE TABLE IF NOT EXISTS schema_version (
+                version INTEGER PRIMARY KEY,
+                applied_at TEXT NOT NULL
             )
         ''')
         
-        # Users
-        cursor.execute('''
-            CREATE TABLE IF NOT EXISTS users (
-                id TEXT PRIMARY KEY,
-                email TEXT UNIQUE NOT NULL,
-                name TEXT,
-                password_hash TEXT,
-                role TEXT DEFAULT 'user',
-                organization_id TEXT,
-                created_at TEXT,
-                last_active TEXT,
-                settings TEXT DEFAULT '{}',
-                FOREIGN KEY (organization_id) REFERENCES organizations(id)
-            )
-        ''')
+        # Check current version
+        cursor.execute('SELECT MAX(version) FROM schema_version')
+        current_version = cursor.fetchone()[0] or 0
         
-        # Alerts
-        cursor.execute('''
-            CREATE TABLE IF NOT EXISTS alerts (
-                id TEXT PRIMARY KEY,
-                timestamp TEXT,
-                user_email TEXT,
-                threat_type TEXT,
-                severity TEXT,
-                source TEXT,
-                indicator TEXT,
-                status TEXT DEFAULT 'pending',
-                details TEXT DEFAULT '{}',
-                organization_id TEXT,
-                FOREIGN KEY (organization_id) REFERENCES organizations(id)
+        # Migration 1: Initial schema
+        if current_version < 1:
+            # Organizations
+            cursor.execute('''
+                CREATE TABLE IF NOT EXISTS organizations (
+                    id TEXT PRIMARY KEY,
+                    name TEXT NOT NULL,
+                    domain TEXT UNIQUE,
+                    subscription_tier TEXT DEFAULT 'free',
+                    user_count INTEGER DEFAULT 0,
+                    created_at TEXT,
+                    settings TEXT DEFAULT '{}'
+                )
+            ''')
+            
+            # Users
+            cursor.execute('''
+                CREATE TABLE IF NOT EXISTS users (
+                    id TEXT PRIMARY KEY,
+                    email TEXT UNIQUE NOT NULL,
+                    name TEXT,
+                    password_hash TEXT,
+                    role TEXT DEFAULT 'user',
+                    organization_id TEXT,
+                    created_at TEXT,
+                    last_active TEXT,
+                    settings TEXT DEFAULT '{}',
+                    FOREIGN KEY (organization_id) REFERENCES organizations(id)
+                )
+            ''')
+            
+            # Alerts
+            cursor.execute('''
+                CREATE TABLE IF NOT EXISTS alerts (
+                    id TEXT PRIMARY KEY,
+                    timestamp TEXT,
+                    user_email TEXT,
+                    threat_type TEXT,
+                    severity TEXT,
+                    source TEXT,
+                    indicator TEXT,
+                    status TEXT DEFAULT 'pending',
+                    details TEXT DEFAULT '{}',
+                    organization_id TEXT,
+                    FOREIGN KEY (organization_id) REFERENCES organizations(id)
+                )
+            ''')
+            
+            # Email connections
+            cursor.execute('''
+                CREATE TABLE IF NOT EXISTS email_connections (
+                    id TEXT PRIMARY KEY,
+                    user_id TEXT,
+                    provider TEXT,  -- gmail, outlook
+                    access_token TEXT,
+                    refresh_token TEXT,
+                    token_expiry TEXT,
+                    last_sync TEXT,
+                    FOREIGN KEY (user_id) REFERENCES users(id)
+                )
+            ''')
+            
+            # Audit log
+            cursor.execute('''
+                CREATE TABLE IF NOT EXISTS audit_log (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    timestamp TEXT,
+                    user_id TEXT,
+                    action TEXT,
+                    resource TEXT,
+                    details TEXT
+                )
+            ''')
+            
+            # Create indexes
+            cursor.execute('CREATE INDEX IF NOT EXISTS idx_alerts_org ON alerts(organization_id)')
+            cursor.execute('CREATE INDEX IF NOT EXISTS idx_alerts_status ON alerts(status)')
+            cursor.execute('CREATE INDEX IF NOT EXISTS idx_users_org ON users(organization_id)')
+            
+            cursor.execute(
+                'INSERT INTO schema_version (version, applied_at) VALUES (?, ?)',
+                (1, datetime.now().isoformat())
             )
-        ''')
         
-        # Email connections
-        cursor.execute('''
-            CREATE TABLE IF NOT EXISTS email_connections (
-                id TEXT PRIMARY KEY,
-                user_id TEXT,
-                provider TEXT,  -- gmail, outlook
-                access_token TEXT,
-                refresh_token TEXT,
-                token_expiry TEXT,
-                last_sync TEXT,
-                FOREIGN KEY (user_id) REFERENCES users(id)
-            )
-        ''')
-        
-        # Audit log
-        cursor.execute('''
-            CREATE TABLE IF NOT EXISTS audit_log (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
-                timestamp TEXT,
-                user_id TEXT,
-                action TEXT,
-                resource TEXT,
-                details TEXT
-            )
-        ''')
-        
-        # Create indexes
-        cursor.execute('CREATE INDEX IF NOT EXISTS idx_alerts_org ON alerts(organization_id)')
-        cursor.execute('CREATE INDEX IF NOT EXISTS idx_alerts_status ON alerts(status)')
-        cursor.execute('CREATE INDEX IF NOT EXISTS idx_users_org ON users(organization_id)')
+        # Future migrations go here:
+        # if current_version < 2:
+        #     cursor.execute('ALTER TABLE ...')
+        #     cursor.execute('INSERT INTO schema_version ...')
         
         conn.commit()
         conn.close()
@@ -528,6 +552,23 @@ if FASTAPI_AVAILABLE:
     app = FastAPI(title="PayGuard Enterprise", version="3.0.0")
     db = EnterpriseDB()
     push_service = MobilePushService()
+    security = HTTPBearer(auto_error=False)
+
+    # Simple API token auth for enterprise endpoints
+    ENTERPRISE_API_TOKEN = os.environ.get("ENTERPRISE_API_TOKEN", "")
+
+    async def verify_enterprise_token(
+        credentials: HTTPAuthorizationCredentials = Depends(security),
+    ):
+        """Require a valid Bearer token for enterprise API endpoints."""
+        if not ENTERPRISE_API_TOKEN:
+            raise HTTPException(
+                status_code=503,
+                detail="Enterprise API token not configured. Set ENTERPRISE_API_TOKEN env var.",
+            )
+        if not credentials or credentials.credentials != ENTERPRISE_API_TOKEN:
+            raise HTTPException(status_code=401, detail="Invalid or missing bearer token")
+        return credentials.credentials
     
     # Pydantic models
     class AlertResponse(BaseModel):
@@ -549,6 +590,15 @@ if FASTAPI_AVAILABLE:
     class WebhookRegister(BaseModel):
         user_id: str
         webhook_url: str
+    
+    class CreateAlertRequest(BaseModel):
+        user_email: str = ""
+        threat_type: str = "unknown"
+        severity: str = "medium"
+        source: str = "manual"
+        indicator: str = ""
+        details: Dict[str, Any] = {}
+        user_id: Optional[str] = None
     
     # Routes
     @app.get("/", response_class=HTMLResponse)
@@ -655,40 +705,42 @@ if FASTAPI_AVAILABLE:
         """
     
     @app.get("/api/stats/{org_id}")
-    async def get_stats(org_id: str):
+    async def get_stats(org_id: str, _token: str = Depends(verify_enterprise_token)):
         """Get dashboard statistics"""
         return db.get_dashboard_stats(org_id)
     
     @app.get("/api/alerts/{org_id}")
-    async def get_alerts(org_id: str, status: str = None, limit: int = 100):
+    async def get_alerts(org_id: str, status: str = None, limit: int = 100, _token: str = Depends(verify_enterprise_token)):
         """Get alerts for organization"""
+        # Validate limit to prevent abuse
+        limit = max(1, min(limit, 1000))
         return db.get_alerts(org_id, status, limit)
     
     @app.post("/api/alerts/{org_id}")
-    async def create_alert(org_id: str, alert: dict, background_tasks: BackgroundTasks):
+    async def create_alert(org_id: str, alert: CreateAlertRequest, background_tasks: BackgroundTasks, _token: str = Depends(verify_enterprise_token)):
         """Create new alert"""
         threat_alert = ThreatAlert(
             id=secrets.token_hex(8),
             timestamp=datetime.now().isoformat(),
-            user_email=alert.get('user_email', ''),
-            threat_type=alert.get('threat_type', 'unknown'),
-            severity=alert.get('severity', 'medium'),
-            source=alert.get('source', 'manual'),
-            indicator=alert.get('indicator', ''),
+            user_email=alert.user_email,
+            threat_type=alert.threat_type,
+            severity=alert.severity,
+            source=alert.source,
+            indicator=alert.indicator,
             status='pending',
-            details=alert.get('details', {})
+            details=alert.details
         )
         
         db.add_alert(threat_alert, org_id)
         
         # Send push notification in background
-        if alert.get('user_id'):
-            background_tasks.add_task(push_service.send_alert, alert['user_id'], threat_alert)
+        if alert.user_id:
+            background_tasks.add_task(push_service.send_alert, alert.user_id, threat_alert)
         
         return {'id': threat_alert.id, 'status': 'created'}
     
     @app.post("/api/webhook/register")
-    async def register_webhook(data: WebhookRegister):
+    async def register_webhook(data: WebhookRegister, _token: str = Depends(verify_enterprise_token)):
         """Register webhook for push notifications"""
         push_service.register_webhook(data.user_id, data.webhook_url)
         return {'status': 'registered'}

@@ -1,6 +1,7 @@
 import re
 import ssl
 import socket
+import asyncio
 from urllib.parse import urlparse, urljoin
 from datetime import datetime, timedelta
 from typing import Tuple, List, Optional
@@ -797,13 +798,19 @@ class RiskScoringEngine:
     async def capture_screen_bytes(self) -> Optional[bytes]:
         try:
             import subprocess
+            import tempfile
             import os as _os
-            fp = '/tmp/payguard_screen.png'
-            subprocess.run(['screencapture', '-x', fp], check=True)
-            if _os.path.exists(fp):
-                with open(fp, 'rb') as fh:
-                    return fh.read()
-            return None
+            fd, fp = tempfile.mkstemp(suffix='.png', prefix='payguard_screen_')
+            _os.close(fd)
+            try:
+                subprocess.run(['screencapture', '-x', fp], check=True)
+                if _os.path.exists(fp):
+                    with open(fp, 'rb') as fh:
+                        return fh.read()
+                return None
+            finally:
+                if _os.path.exists(fp):
+                    _os.unlink(fp)
         except Exception:
             return None
 
@@ -1785,7 +1792,7 @@ class RiskScoringEngine:
             p_dire = None
             if self.dire_home and self.dire_model_path and self.dire_model_path.exists():
                 if self._dire_busy:
-                    # Skip if already running to avoid queue buildup
+                    # Another call is already running DIRE; skip to avoid queue buildup
                     return 0.0
                 
                 # Fast-path: Check if image is worth AI analysis
@@ -1848,7 +1855,8 @@ class RiskScoringEngine:
                     logger.debug(f"DIRE exception: {e}")
                     p_dire = None
                 finally:
-                    self._dire_busy = False
+        self._dire_busy = False
+        self._dire_lock = asyncio.Lock()
 
             if p_dire is None:
                 return 0.0

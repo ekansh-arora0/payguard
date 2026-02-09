@@ -240,13 +240,18 @@ class PayGuardApp(rumps.App):
 
     def _capture_screen(self):
         try:
-            path = "/tmp/payguard_capture.png"
-            result = subprocess.run(["screencapture", "-x", "-C", path], capture_output=True, timeout=10)
-            if result.returncode == 0 and os.path.exists(path):
-                with open(path, "rb") as f:
-                    data = f.read()
-                os.remove(path)
-                return data
+            import tempfile
+            fd, path = tempfile.mkstemp(suffix='.png', prefix='payguard_capture_')
+            os.close(fd)
+            try:
+                result = subprocess.run(["screencapture", "-x", "-C", path], capture_output=True, timeout=10)
+                if result.returncode == 0 and os.path.exists(path):
+                    with open(path, "rb") as f:
+                        data = f.read()
+                    return data
+            finally:
+                if os.path.exists(path):
+                    os.remove(path)
         except Exception as e:
             self.logger.error(f"Capture failed: {e}")
         return None
