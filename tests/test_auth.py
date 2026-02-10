@@ -7,7 +7,7 @@ Uses an in-memory mock MongoDB collection via unittest.mock.
 
 import hashlib
 import secrets
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
@@ -92,7 +92,7 @@ class TestValidateApiKey:
         mock_db.api_keys.find_one = AsyncMock(return_value={
             "key_hash": "x", "is_active": False, "tier": "free",
             "requests_count": 0, "daily_limit": 1000,
-            "last_reset": datetime.utcnow(),
+            "last_reset": datetime.now(timezone.utc),
         })
         with pytest.raises(HTTPException) as exc_info:
             await manager.validate_api_key("some-key")
@@ -104,7 +104,7 @@ class TestValidateApiKey:
         mock_db.api_keys.find_one = AsyncMock(return_value={
             "key_hash": "x", "is_active": True, "tier": "free",
             "requests_count": 1000, "daily_limit": 1000,
-            "last_reset": datetime.utcnow(),
+            "last_reset": datetime.now(timezone.utc),
         })
         with pytest.raises(HTTPException) as exc_info:
             await manager.validate_api_key("some-key")
@@ -117,7 +117,7 @@ class TestValidateApiKey:
         mock_db.api_keys.find_one = AsyncMock(return_value={
             "key_hash": key_hash, "is_active": True, "tier": "free",
             "requests_count": 5, "daily_limit": 1000,
-            "last_reset": datetime.utcnow(),
+            "last_reset": datetime.now(timezone.utc),
         })
         doc = await manager.validate_api_key(raw_key)
         assert doc["is_active"] is True
@@ -130,7 +130,7 @@ class TestValidateApiKey:
         mock_db.api_keys.find_one = AsyncMock(return_value={
             "key_hash": key_hash, "is_active": True, "tier": "free",
             "requests_count": 999, "daily_limit": 1000,
-            "last_reset": datetime.utcnow() - timedelta(days=2),
+            "last_reset": datetime.now(timezone.utc) - timedelta(days=2),
         })
         doc = await manager.validate_api_key(raw_key)
         # Should have called update_one twice: once for reset, once for increment
@@ -168,7 +168,7 @@ class TestMinuteRateLimit:
 
     def test_old_entries_pruned(self, manager):
         """Entries older than 1 minute should be pruned."""
-        old_time = datetime.utcnow() - timedelta(minutes=2)
+        old_time = datetime.now(timezone.utc) - timedelta(minutes=2)
         manager._minute_log["prune_test"] = [old_time] * 100
         # This call should prune old entries and succeed
         manager._check_minute_limit("prune_test", "free")

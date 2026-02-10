@@ -18,7 +18,7 @@ import ssl
 import socket
 from abc import ABC, abstractmethod
 from dataclasses import dataclass, field
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from enum import Enum
 from typing import Optional, Dict, Any, List, Set, Tuple
 from urllib.parse import urlparse
@@ -75,7 +75,7 @@ class ReputationResult:
     domain_age_days: Optional[int] = None
     ssl_info: Optional[SSLInfo] = None
     cached: bool = False
-    checked_at: datetime = field(default_factory=datetime.utcnow)
+    checked_at: datetime = field(default_factory=lambda: datetime.now(timezone.utc))
     confidence: float = 0.0
     is_whitelisted: bool = False
 
@@ -240,7 +240,7 @@ class OpenPhishFeed(ThreatFeed):
                         if domain:
                             self._bloom.add(domain)
                 
-                self._last_fetch = datetime.utcnow()
+                self._last_fetch = datetime.now(timezone.utc)
                 logger.info(f"OpenPhish: Fetched {len(urls)} URLs")
                 return urls
                 
@@ -324,7 +324,7 @@ class PhishTankFeed(ThreatFeed):
                             self._domains.add(domain)
                             self._bloom.add(domain)
                 
-                self._last_fetch = datetime.utcnow()
+                self._last_fetch = datetime.now(timezone.utc)
                 logger.info(f"PhishTank: Fetched {len(urls)} URLs")
                 return urls
                 
@@ -400,7 +400,7 @@ class URLhausFeed(ThreatFeed):
                         if domain:
                             self._bloom.add(domain)
                 
-                self._last_fetch = datetime.utcnow()
+                self._last_fetch = datetime.now(timezone.utc)
                 logger.info(f"URLhaus: Fetched {len(urls)} URLs")
                 return urls
                 
@@ -454,7 +454,7 @@ class DomainAgeChecker:
         # Check cache first
         if domain in self._cache:
             age, cached_at = self._cache[domain]
-            if datetime.utcnow() - cached_at < self._cache_ttl:
+            if datetime.now(timezone.utc) - cached_at < self._cache_ttl:
                 return age
         
         try:
@@ -466,14 +466,14 @@ class DomainAgeChecker:
                 creation_date = creation_date[0]
             
             if creation_date:
-                age_days = (datetime.utcnow() - creation_date).days
-                self._cache[domain] = (age_days, datetime.utcnow())
+                age_days = (datetime.now(timezone.utc) - creation_date).days
+                self._cache[domain] = (age_days, datetime.now(timezone.utc))
                 return age_days
                 
         except Exception as e:
             logger.debug(f"WHOIS lookup failed for {domain}: {e}")
         
-        self._cache[domain] = (None, datetime.utcnow())
+        self._cache[domain] = (None, datetime.now(timezone.utc))
         return None
     
     def is_new_domain(self, age_days: Optional[int]) -> bool:
@@ -509,7 +509,7 @@ class SSLInspector:
         # Check cache
         if domain in self._cache:
             info, cached_at = self._cache[domain]
-            if datetime.utcnow() - cached_at < self._cache_ttl:
+            if datetime.now(timezone.utc) - cached_at < self._cache_ttl:
                 return info
         
         try:
@@ -546,7 +546,7 @@ class SSLInspector:
             
             # Check if certificate is valid
             is_valid = True
-            if expires_at and expires_at < datetime.utcnow():
+            if expires_at and expires_at < datetime.now(timezone.utc):
                 is_valid = False
             
             # Check if domain matches CN or SAN
@@ -563,7 +563,7 @@ class SSLInspector:
                 subject_alt_names=san_list
             )
             
-            self._cache[domain] = (ssl_info, datetime.utcnow())
+            self._cache[domain] = (ssl_info, datetime.now(timezone.utc))
             return ssl_info
             
         except ssl.SSLCertVerificationError as e:
@@ -574,7 +574,7 @@ class SSLInspector:
                 organization_match=False,
                 error=f"Certificate verification failed: {e}"
             )
-            self._cache[domain] = (ssl_info, datetime.utcnow())
+            self._cache[domain] = (ssl_info, datetime.now(timezone.utc))
             return ssl_info
             
         except Exception as e:
@@ -585,7 +585,7 @@ class SSLInspector:
                 organization_match=False,
                 error=f"SSL inspection failed: {e}"
             )
-            self._cache[domain] = (ssl_info, datetime.utcnow())
+            self._cache[domain] = (ssl_info, datetime.now(timezone.utc))
             return ssl_info
     
     def _domain_matches_cert(
@@ -826,7 +826,7 @@ class URLReputationService:
         cache_key = url.lower()
         if cache_key in self._result_cache:
             result, cached_at = self._result_cache[cache_key]
-            if datetime.utcnow() - cached_at < self._cache_ttl:
+            if datetime.now(timezone.utc) - cached_at < self._cache_ttl:
                 self._stats['cache_hits'] += 1
                 result.cached = True
                 return result
@@ -840,7 +840,7 @@ class URLReputationService:
                 is_whitelisted=True,
                 confidence=1.0
             )
-            self._result_cache[cache_key] = (result, datetime.utcnow())
+            self._result_cache[cache_key] = (result, datetime.now(timezone.utc))
             return result
         
         # Initialize result
@@ -897,7 +897,7 @@ class URLReputationService:
         )
         
         # Cache result
-        self._result_cache[cache_key] = (result, datetime.utcnow())
+        self._result_cache[cache_key] = (result, datetime.now(timezone.utc))
         
         return result
     
@@ -952,7 +952,7 @@ class URLReputationService:
         
         async with self._update_lock:
             self._is_updating = True
-            start_time = datetime.utcnow()
+            start_time = datetime.now(timezone.utc)
             errors: List[str] = []
             total_added = 0
             
@@ -988,7 +988,7 @@ class URLReputationService:
                         errors.append(error_msg)
                         logger.error(error_msg)
                 
-                self._last_update = datetime.utcnow()
+                self._last_update = datetime.now(timezone.utc)
                 duration = (self._last_update - start_time).total_seconds()
                 
                 logger.info(

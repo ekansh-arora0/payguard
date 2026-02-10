@@ -15,7 +15,7 @@ import ssl
 import logging
 import hashlib
 import secrets
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from typing import Optional, Dict, Any, List, Callable
 from functools import wraps
 from dataclasses import dataclass, field
@@ -344,7 +344,7 @@ class AuthFailureLogger:
         
         # Create the event
         event = AuthFailureEvent(
-            timestamp=datetime.utcnow(),
+            timestamp=datetime.now(timezone.utc),
             ip_address=ip_address,
             endpoint=str(request.url.path),
             failure_reason=reason,
@@ -373,7 +373,7 @@ class AuthFailureLogger:
     
     async def _track_failure(self, ip_address: str):
         """Track failures for anomaly detection"""
-        now = datetime.utcnow()
+        now = datetime.now(timezone.utc)
         
         # Reset window if expired
         if ip_address in self._failure_window:
@@ -405,7 +405,7 @@ class AuthFailureLogger:
                     "ip_address": ip_address,
                     "failure_count": count,
                     "window_minutes": self.window_duration.total_seconds() / 60,
-                    "timestamp": datetime.utcnow().isoformat(),
+                    "timestamp": datetime.now(timezone.utc).isoformat(),
                 })
             except Exception as e:
                 logger.error(f"Failed to store security alert: {e}")
@@ -469,7 +469,7 @@ class RateLimiter:
         Returns:
             Tuple of (allowed, reason if denied)
         """
-        now = datetime.utcnow()
+        now = datetime.now(timezone.utc)
         
         # Get tier-specific limits, but use config values as base
         limits = self._get_tier_limits(tier)
@@ -655,7 +655,7 @@ class SecureAPIKeyManager:
             await self.db.api_keys.update_one(
                 {"key_hash": key_hash},
                 {
-                    "$set": {"last_used": datetime.utcnow()},
+                    "$set": {"last_used": datetime.now(timezone.utc)},
                     "$inc": {"total_requests": 1}
                 }
             )
@@ -691,10 +691,10 @@ class SecureAPIKeyManager:
             "tier": tier,
             "scopes": scopes or ["read"],
             "is_active": True,
-            "created_at": datetime.utcnow(),
+            "created_at": datetime.now(timezone.utc),
             "last_used": None,
             "total_requests": 0,
-            "expires_at": datetime.utcnow() + timedelta(days=365),  # 1 year expiry
+            "expires_at": datetime.now(timezone.utc) + timedelta(days=365),  # 1 year expiry
         }
         
         if self.db is not None:
@@ -728,7 +728,7 @@ class SecureAPIKeyManager:
                 {
                     "$set": {
                         "is_active": False,
-                        "revoked_at": datetime.utcnow()
+                        "revoked_at": datetime.now(timezone.utc)
                     }
                 }
             )

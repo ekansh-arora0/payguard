@@ -5,7 +5,7 @@ from fastapi.middleware.cors import CORSMiddleware
 import uvicorn
 import json
 import re
-from datetime import datetime
+from datetime import datetime, timezone
 
 app = FastAPI(title="PayGuard Simple API")
 
@@ -18,7 +18,7 @@ app.add_middleware(
 
 @app.get("/api/health")
 async def health():
-    return {"status": "healthy", "timestamp": datetime.utcnow()}
+    return {"status": "healthy", "timestamp": datetime.now(timezone.utc)}
 
 @app.post("/api/media-risk/bytes")
 async def analyze_media(payload: dict):

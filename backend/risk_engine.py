@@ -3,7 +3,7 @@ import ssl
 import socket
 import asyncio
 from urllib.parse import urlparse, urljoin
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from typing import Tuple, List, Optional
 from .models import RiskLevel, PaymentGateway, RiskScore, Merchant
 from .email_guardian import EmailGuardian
@@ -1494,13 +1494,13 @@ class RiskScoringEngine:
             if not created:
                 return None
             if isinstance(created, datetime):
-                delta = datetime.utcnow() - created
+                delta = datetime.now(timezone.utc) - created
             else:
                 # attempt to parse string
                 try:
                     from dateutil import parser
                     dt = parser.parse(str(created))
-                    delta = datetime.utcnow() - dt
+                    delta = datetime.now(timezone.utc) - dt
                 except Exception:
                     return None
             return max(0, delta.days)
@@ -1615,14 +1615,14 @@ class RiskScoringEngine:
 
     async def _update_openphish_cache(self):
         try:
-            if self.openphish_last_fetch and (datetime.utcnow() - self.openphish_last_fetch) < timedelta(hours=1):
+            if self.openphish_last_fetch and (datetime.now(timezone.utc) - self.openphish_last_fetch) < timedelta(hours=1):
                 return
             async with httpx.AsyncClient(timeout=5.0) as client:
                 resp = await client.get("https://openphish.com/feed.txt")
                 resp.raise_for_status()
                 lines = [l.strip() for l in resp.text.splitlines() if l.strip()]
                 self.openphish_urls = set(lines)
-                self.openphish_last_fetch = datetime.utcnow()
+                self.openphish_last_fetch = datetime.now(timezone.utc)
         except Exception as e:
             logger.debug(f"OpenPhish update failed: {e}")
 

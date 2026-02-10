@@ -4,7 +4,7 @@ from motor.motor_asyncio import AsyncIOMotorDatabase
 import secrets
 import hashlib
 from collections import defaultdict
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from typing import Dict, List
 import logging
 
@@ -45,9 +45,9 @@ class APIKeyManager:
             "tier": tier,
             "requests_count": 0,
             "daily_limit": daily_limits.get(tier, 1000),
-            "created_at": datetime.utcnow(),
+            "created_at": datetime.now(timezone.utc),
             "is_active": True,
-            "last_reset": datetime.utcnow()
+            "last_reset": datetime.now(timezone.utc)
         }
         
         await self.db.api_keys.insert_one(api_key_doc)
@@ -61,7 +61,7 @@ class APIKeyManager:
     
     def _check_minute_limit(self, key_hash: str, tier: str) -> None:
         """Check per-minute rate limit (in-memory). Raises 429 if exceeded."""
-        now = datetime.utcnow()
+        now = datetime.now(timezone.utc)
         cutoff = now - timedelta(minutes=1)
         # Prune old entries
         self._minute_log[key_hash] = [
@@ -97,11 +97,11 @@ class APIKeyManager:
         self._check_minute_limit(key_hash, tier)
         
         # Check if we need to reset daily counter
-        last_reset = api_key_doc.get("last_reset", datetime.utcnow())
-        if datetime.utcnow() - last_reset > timedelta(days=1):
+        last_reset = api_key_doc.get("last_reset", datetime.now(timezone.utc))
+        if datetime.now(timezone.utc) - last_reset > timedelta(days=1):
             await self.db.api_keys.update_one(
                 {"key_hash": key_hash},
-                {"$set": {"requests_count": 0, "last_reset": datetime.utcnow()}}
+                {"$set": {"requests_count": 0, "last_reset": datetime.now(timezone.utc)}}
             )
             api_key_doc["requests_count"] = 0
         

@@ -7,7 +7,8 @@ import os
 import logging
 from pathlib import Path
 from typing import List, Optional
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
+from contextlib import asynccontextmanager
 import time
 
 from .models import (
@@ -38,8 +39,16 @@ db = client[os.environ['DB_NAME']]
 risk_engine = RiskScoringEngine(db)
 api_key_manager = APIKeyManager(db)
 
+# Lifespan handler (replaces deprecated on_event)
+@asynccontextmanager
+async def lifespan(app):
+    logger.info("PayGuard API started")
+    yield
+    logger.info("Shutting down — closing database connection")
+    client.close()
+
 # Create the main app
-app = FastAPI(title="PayGuard API", version="1.0")
+app = FastAPI(title="PayGuard API", version="1.0", lifespan=lifespan)
 
 # Create router with /api/v1 prefix (versioned API)
 api_router = APIRouter(prefix="/api/v1")
@@ -75,6 +84,19 @@ else:
     )
 logger = logging.getLogger(__name__)
 
+# ============= Input Sanitization =============
+
+def _sanitize_mongo_input(value: str) -> str:
+    """Sanitize user input to prevent MongoDB NoSQL injection.
+    Strips any keys starting with '$' if a dict is somehow passed, and
+    ensures string values don't contain MongoDB operators."""
+    if not isinstance(value, str):
+        raise HTTPException(status_code=400, detail="Invalid input type")
+    # Block strings that look like MongoDB operators
+    if value.startswith("$"):
+        raise HTTPException(status_code=400, detail="Invalid input")
+    return value
+
 # ============= Public Endpoints =============
 
 @api_router.get("/")
@@ -95,8 +117,18 @@ async def root():
 
 @api_router.get("/health")
 async def health_check():
-    """Health check endpoint"""
-    return {"status": "healthy", "timestamp": datetime.utcnow()}
+    """Health check endpoint with ML model readiness"""
+    models_loaded = {
+        "xgboost": risk_engine.model is not None if hasattr(risk_engine, 'model') else False,
+        "cnn": risk_engine.cnn_model is not None if hasattr(risk_engine, 'cnn_model') else False,
+    }
+    all_ready = any(models_loaded.values())
+    return {
+        "status": "healthy",
+        "models_ready": all_ready,
+        "models": models_loaded,
+        "timestamp": datetime.now(timezone.utc),
+    }
 
 # ============= Risk Assessment =============
 
@@ -137,14 +169,14 @@ async def check_risk(
         except Exception:
             pass
         
-        await db.risk_checks.insert_one(risk_score.dict())
+        await db.risk_checks.insert_one(risk_score.model_dump())
         await db.metrics.insert_one({
             "endpoint": "POST /api/risk",
             "url": request.url,
             "trust_score": risk_score.trust_score,
             "risk_level": risk_score.risk_level.value,
             "latency_ms": int((time.time() - t0) * 1000),
-            "timestamp": datetime.utcnow()
+            "timestamp": datetime.now(timezone.utc)
         })
         
         # Update merchant record
@@ -168,7 +200,7 @@ async def get_risk_by_url(
         
         # Check if we have recent data
         recent_check = await db.risk_checks.find_one(
-            {"url": url, "checked_at": {"$gte": datetime.utcnow() - timedelta(hours=24)}},
+            {"url": url, "checked_at": {"$gte": datetime.now(timezone.utc) - timedelta(hours=24)}},
             sort=[("checked_at", -1)]
         )
         
@@ -184,14 +216,14 @@ async def get_risk_by_url(
         except Exception:
             html = None
         risk_score = await risk_engine.calculate_risk(url, content=html)
-        await db.risk_checks.insert_one(risk_score.dict())
+        await db.risk_checks.insert_one(risk_score.model_dump())
         await db.metrics.insert_one({
             "endpoint": "GET /api/risk",
             "url": url,
             "trust_score": risk_score.trust_score,
             "risk_level": risk_score.risk_level.value,
             "latency_ms": int((time.time() - t0) * 1000),
-            "timestamp": datetime.utcnow()
+            "timestamp": datetime.now(timezone.utc)
         })
         await _update_merchant_record(risk_score)
         
@@ -213,7 +245,8 @@ async def get_merchant_history(
     try:
         await api_key_manager.validate_api_key(api_key)
         
-        query = {"domain": domain} if domain else {}
+        query = {"domain": _sanitize_mongo_input(domain)} if domain else {}
+        limit = max(1, min(limit, 500))
         merchants = await db.merchants.find(query).limit(limit).to_list(limit)
         
         return [Merchant(**m) for m in merchants]
@@ -231,7 +264,7 @@ async def get_merchant(
     try:
         await api_key_manager.validate_api_key(api_key)
         
-        merchant = await db.merchants.find_one({"domain": domain})
+        merchant = await db.merchants.find_one({"domain": _sanitize_mongo_input(domain)})
         
         if not merchant:
             raise HTTPException(status_code=404, detail="Merchant not found")
@@ -258,8 +291,8 @@ async def create_merchant(
         if existing:
             return Merchant(**existing)
         
-        merchant_obj = Merchant(**merchant.dict())
-        await db.merchants.insert_one(merchant_obj.dict())
+        merchant_obj = Merchant(**merchant.model_dump())
+        await db.merchants.insert_one(merchant_obj.model_dump())
         
         return merchant_obj
         
@@ -329,7 +362,7 @@ async def check_transaction(
             reasons=reasons
         )
         
-        await db.transaction_checks.insert_one(transaction.dict())
+        await db.transaction_checks.insert_one(transaction.model_dump())
         
         return transaction
         
@@ -348,8 +381,8 @@ async def report_fraud(
     try:
         await api_key_manager.validate_api_key(api_key)
         
-        fraud_report = FraudReport(**report.dict())
-        await db.fraud_reports.insert_one(fraud_report.dict())
+        fraud_report = FraudReport(**report.model_dump())
+        await db.fraud_reports.insert_one(fraud_report.model_dump())
         
         # Update merchant fraud count
         await db.merchants.update_one(
@@ -376,7 +409,8 @@ async def get_fraud_reports(
     try:
         await api_key_manager.validate_api_key(api_key)
         
-        query = {"domain": domain} if domain else {}
+        query = {"domain": _sanitize_mongo_input(domain)} if domain else {}
+        limit = max(1, min(limit, 500))
         reports = await db.fraud_reports.find(query).limit(limit).to_list(limit)
         
         return [FraudReport(**r) for r in reports]
@@ -399,10 +433,10 @@ async def create_custom_rule(
         
         custom_rule = CustomRule(
             institution_id=institution_id,
-            **rule.dict()
+            **rule.model_dump()
         )
         
-        await db.custom_rules.insert_one(custom_rule.dict())
+        await db.custom_rules.insert_one(custom_rule.model_dump())
         
         logger.info(f"Custom rule created for institution: {institution_id}")
         
@@ -455,20 +489,20 @@ async def get_media_risk(url: str, force: Optional[bool] = False, api_key: str =
         t0 = time.time()
         await api_key_manager.validate_api_key(api_key)
         recent = await db.media_checks.find_one(
-            {"url": url, "checked_at": {"$gte": datetime.utcnow() - timedelta(hours=24)}},
+            {"url": url, "checked_at": {"$gte": datetime.now(timezone.utc) - timedelta(hours=24)}},
             sort=[("checked_at", -1)]
         )
         if recent and not force:
             return MediaRisk(**recent)
         media = await risk_engine.calculate_media_risk(url)
-        await db.media_checks.insert_one(media.dict())
+        await db.media_checks.insert_one(media.model_dump())
         await db.metrics.insert_one({
             "endpoint": "GET /api/media-risk",
             "url": url,
             "media_score": media.media_score,
             "media_color": media.media_color.value,
             "latency_ms": int((time.time() - t0) * 1000),
-            "timestamp": datetime.utcnow()
+            "timestamp": datetime.now(timezone.utc)
         })
         return media
     except Exception as e:
@@ -504,7 +538,7 @@ async def post_media_risk_image(file: UploadFile = File(...), api_key: str = Dep
             "media_score": media.media_score,
             "media_color": media.media_color.value,
             "latency_ms": int((time.time() - t0) * 1000),
-            "timestamp": datetime.utcnow()
+            "timestamp": datetime.now(timezone.utc)
         })
         return media
     except HTTPException:
@@ -587,7 +621,7 @@ async def get_media_risk_screen(api_key: str = Depends(require_api_key)):
             "media_color": media.media_color.value,
             "scam_detected": scam_alert_data is not None,
             "latency_ms": int((time.time() - t0) * 1000),
-            "timestamp": datetime.utcnow()
+            "timestamp": datetime.now(timezone.utc)
         })
         return media
     except HTTPException:
@@ -680,7 +714,7 @@ async def post_media_risk_bytes(
             "media_score": media.media_score,
             "media_color": media.media_color.value,
             "latency_ms": int((time.time() - t0) * 1000),
-            "timestamp": datetime.utcnow()
+            "timestamp": datetime.now(timezone.utc)
         })
         
         return media
@@ -735,7 +769,7 @@ async def _update_merchant_record(risk_score: RiskScore):
                 {"domain": risk_score.domain},
                 {
                     "$set": {
-                        "last_checked": datetime.utcnow(),
+                        "last_checked": datetime.now(timezone.utc),
                         "ssl_valid": risk_score.ssl_valid,
                         "domain_age_days": risk_score.domain_age_days,
                         "payment_gateways": risk_score.detected_gateways
@@ -753,7 +787,7 @@ async def _update_merchant_record(risk_score: RiskScore):
                 payment_gateways=risk_score.detected_gateways,
                 total_reports=1
             )
-            await db.merchants.insert_one(merchant.dict())
+            await db.merchants.insert_one(merchant.model_dump())
             
     except Exception as e:
         logger.error(f"Error updating merchant record: {str(e)}")
@@ -803,10 +837,6 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-@app.on_event("shutdown")
-async def shutdown_db_client():
-    client.close()
-
 @api_router.post("/feedback/label", response_model=LabelFeedback)
 async def submit_label_feedback(
     feedback: LabelFeedbackCreate,
@@ -814,8 +844,8 @@ async def submit_label_feedback(
 ):
     try:
         await api_key_manager.validate_api_key(api_key)
-        doc = LabelFeedback(**feedback.dict())
-        await db.labels_feedback.insert_one(doc.dict())
+        doc = LabelFeedback(**feedback.model_dump())
+        await db.labels_feedback.insert_one(doc.model_dump())
         return doc
     except Exception as e:
         logger.error(f"Error submitting label feedback: {str(e)}")
@@ -830,7 +860,7 @@ async def check_risk_with_content(
         await api_key_manager.validate_api_key(api_key)
         # short-term cache to stabilize scores for dynamic pages
         recent_check = await db.risk_checks.find_one(
-            {"url": request.url, "checked_at": {"$gte": datetime.utcnow() - timedelta(minutes=10)}},
+            {"url": request.url, "checked_at": {"$gte": datetime.now(timezone.utc) - timedelta(minutes=10)}},
             sort=[("checked_at", -1)]
         )
         if recent_check:
@@ -842,14 +872,14 @@ async def check_risk_with_content(
                 resp.raise_for_status()
                 html = resp.text[:100000]
         risk_score = await risk_engine.calculate_risk(request.url, content=html)
-        await db.risk_checks.insert_one(risk_score.dict())
+        await db.risk_checks.insert_one(risk_score.model_dump())
         await db.metrics.insert_one({
             "endpoint": "POST /api/risk/content",
             "url": request.url,
             "trust_score": risk_score.trust_score,
             "risk_level": risk_score.risk_level.value,
             "latency_ms": int((time.time() - t0) * 1000),
-            "timestamp": datetime.utcnow()
+            "timestamp": datetime.now(timezone.utc)
         })
         await _update_merchant_record(risk_score)
         return risk_score

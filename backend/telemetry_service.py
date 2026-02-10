@@ -17,7 +17,7 @@ import logging
 import secrets
 from abc import ABC, abstractmethod
 from dataclasses import dataclass, field
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from enum import Enum
 from typing import Dict, Any, Optional, List, Set, Callable
 from collections import Counter
@@ -121,14 +121,14 @@ class TelemetryConsent:
     def opt_in(self) -> None:
         """Opt in to telemetry collection"""
         self._opted_in = True
-        self._consent_timestamp = datetime.utcnow()
+        self._consent_timestamp = datetime.now(timezone.utc)
         logger.info("User opted in to telemetry")
         self._notify_callbacks(True)
     
     def opt_out(self) -> None:
         """Opt out of telemetry collection"""
         self._opted_in = False
-        self._consent_timestamp = datetime.utcnow()
+        self._consent_timestamp = datetime.now(timezone.utc)
         logger.info("User opted out of telemetry")
         self._notify_callbacks(False)
     
@@ -318,7 +318,7 @@ class AdversarialFeedbackDetector:
     
     def cleanup_old_data(self, max_age_days: int = 7) -> None:
         """Remove data older than max_age_days"""
-        cutoff = datetime.utcnow() - timedelta(days=max_age_days)
+        cutoff = datetime.now(timezone.utc) - timedelta(days=max_age_days)
         
         for session in list(self._session_reports.keys()):
             self._session_reports[session] = [
@@ -406,7 +406,7 @@ class TelemetryService:
         event = AnonymizedEvent(
             event_id=secrets.token_hex(8),
             event_type=TelemetryEventType.DETECTION,
-            timestamp=datetime.utcnow(),
+            timestamp=datetime.now(timezone.utc),
             session_hash=self.anonymizer.hash_identifier(session_id),
             detection_type=detection_type,
             confidence_bucket=self.anonymizer.bucket_confidence(confidence),
@@ -466,7 +466,7 @@ class TelemetryService:
             user_verdict=user_verdict,
             our_verdict=our_verdict,
             confidence_bucket=self.anonymizer.bucket_confidence(confidence),
-            timestamp=datetime.utcnow(),
+            timestamp=datetime.now(timezone.utc),
             session_hash=self.anonymizer.hash_identifier(session_id)
         )
         
@@ -496,7 +496,7 @@ class TelemetryService:
                 safe_reports=0,
                 dangerous_reports=0,
                 confidence=0.0,
-                last_updated=datetime.utcnow()
+                last_updated=datetime.now(timezone.utc)
             )
         
         agg = self._aggregated_feedback[domain]
@@ -513,7 +513,7 @@ class TelemetryService:
         else:
             agg.confidence = 0.0
         
-        agg.last_updated = datetime.utcnow()
+        agg.last_updated = datetime.now(timezone.utc)
     
     def get_aggregated_feedback(self, domain_hash: str) -> Optional[AggregatedFeedback]:
         """

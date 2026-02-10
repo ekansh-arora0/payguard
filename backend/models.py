@@ -1,6 +1,6 @@
 from pydantic import BaseModel, Field, HttpUrl
 from typing import Optional, List, Dict, Any
-from datetime import datetime
+from datetime import datetime, timezone
 import uuid
 from enum import Enum
 
@@ -25,7 +25,7 @@ class APIKey(BaseModel):
     tier: str = "free"  # free, premium, enterprise
     requests_count: int = 0
     daily_limit: int = 1000
-    created_at: datetime = Field(default_factory=datetime.utcnow)
+    created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
     is_active: bool = True
 
 class APIKeyCreate(BaseModel):
@@ -42,8 +42,8 @@ class Merchant(BaseModel):
     fraud_reports: int = 0
     verified: bool = False
     payment_gateways: List[PaymentGateway] = []
-    first_seen: datetime = Field(default_factory=datetime.utcnow)
-    last_checked: datetime = Field(default_factory=datetime.utcnow)
+    first_seen: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
+    last_checked: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
     ssl_valid: bool = False
     domain_age_days: Optional[int] = None
     
@@ -66,7 +66,7 @@ class RiskScore(BaseModel):
     detected_gateways: List[PaymentGateway] = []
     merchant_reputation: Optional[float] = None
     education_message: str
-    checked_at: datetime = Field(default_factory=datetime.utcnow)
+    checked_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
     
 class RiskCheckRequest(BaseModel):
     url: str
@@ -81,7 +81,7 @@ class FraudReport(BaseModel):
     description: Optional[str] = None
     reported_by: Optional[str] = "anonymous"
     verified: bool = False
-    created_at: datetime = Field(default_factory=datetime.utcnow)
+    created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
 
 class FraudReportCreate(BaseModel):
     domain: str
@@ -100,7 +100,7 @@ class TransactionCheck(BaseModel):
     risk_score: float
     approved: bool
     reasons: List[str] = []
-    checked_at: datetime = Field(default_factory=datetime.utcnow)
+    checked_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
 
 class TransactionCheckRequest(BaseModel):
     merchant_domain: str
@@ -116,7 +116,7 @@ class CustomRule(BaseModel):
     rule_type: str  # domain_whitelist, domain_blacklist, amount_threshold, etc
     parameters: Dict[str, Any]
     is_active: bool = True
-    created_at: datetime = Field(default_factory=datetime.utcnow)
+    created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
 
 class CustomRuleCreate(BaseModel):
     rule_name: str
@@ -137,7 +137,7 @@ class LabelFeedback(BaseModel):
     domain: str
     label: int
     source: Optional[str] = None
-    created_at: datetime = Field(default_factory=datetime.utcnow)
+    created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
 
 class LabelFeedbackCreate(BaseModel):
     url: str
@@ -170,5 +170,5 @@ class MediaRisk(BaseModel):
     reasons: List[str] = []
     image_fake_prob: Optional[float] = None
     video_fake_prob: Optional[float] = None
-    checked_at: datetime = Field(default_factory=datetime.utcnow)
+    checked_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
     scam_alert: Optional[ScamAlert] = None  # Enhanced for scam detection
