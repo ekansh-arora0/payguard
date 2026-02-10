@@ -92,3 +92,15 @@ __pycache__/
 *.pyc
 .env
 .pytest_cache/
+
+# TLS certificates (generated locally)
+nginx/certs/
+
+# MongoDB backups
+backups/
+
+# Next.js build output
+website/.next/
+
+# Hypothesis test cache
+.hypothesis/
