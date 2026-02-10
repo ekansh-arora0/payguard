@@ -1652,21 +1652,76 @@ class RiskScoringEngine:
             return msg
 
     def _url_features(self, url: str) -> np.ndarray:
-        u = url.lower()
-        feats = [
-            len(url),
-            url.count('.'),
-            url.count('/'),
-            url.count('-'),
-            url.count('_'),
-            url.count('?'),
-            url.count('='),
-            url.count('&'),
-            int('login' in u),
-            int('secure' in u),
-            int('account' in u),
-            int('verify' in u),
-        ]
+        """Extract URL features for ML model prediction.
+        Returns 36 features when enhanced model is loaded, 12 for legacy."""
+        u = url.lower().strip()
+        # Check if we have the enhanced model (36 features) or legacy (12)
+        try:
+            n_features = self.ml_model.num_features() if hasattr(self.ml_model, 'num_features') else 12
+        except Exception:
+            n_features = 12
+
+        if n_features > 12:
+            from urllib.parse import urlparse as _urlparse
+            from collections import Counter as _Counter
+            if not u.startswith(("http://", "https://", "ftp://")):
+                _up = _urlparse("http://" + u)
+            else:
+                _up = _urlparse(u)
+            hostname = _up.hostname or ""
+            path = _up.path or ""
+            query = _up.query or ""
+            _SUSPICIOUS_TLDS = {".tk",".ml",".ga",".cf",".gq",".xyz",".top",".club",".work",".buzz",".rest",".fit",".bid",".click",".link",".stream",".download",".win",".racing",".review",".date",".accountant",".science",".party",".cricket",".faith"}
+            _BRAND_KW = {"paypal","apple","google","microsoft","amazon","netflix","facebook","instagram","whatsapp","bank","chase","wellsfargo","citibank","hsbc","barclays","linkedin","dropbox","icloud","outlook","yahoo","ebay","coinbase","binance","metamask"}
+            hostname_dots = hostname.count(".")
+            tld = ("." + hostname.rsplit(".", 1)[-1]) if "." in hostname else ""
+            digit_count = sum(c.isdigit() for c in url)
+            brand_in_url = 0
+            for _b in _BRAND_KW:
+                if _b in u:
+                    parts = hostname.split(".")
+                    actual = parts[-2] if len(parts) >= 2 else hostname
+                    if _b != actual and _b in hostname:
+                        brand_in_url = 1
+                        break
+            if url:
+                freq = _Counter(url)
+                probs = [c / len(url) for c in freq.values()]
+                entropy = -sum(p * np.log2(p) for p in probs if p > 0)
+            else:
+                entropy = 0.0
+            _SUSP_WORDS = {"login","signin","verify","secure","account","update","confirm","password","credential","authenticate","suspend","limited","unlock","restore","wallet","billing","invoice"}
+            feats = [
+                len(url), url.count("."), url.count("/"), url.count("-"),
+                url.count("_"), url.count("?"), url.count("="), url.count("&"),
+                int(any(w in u for w in ["login","signin","log-in","sign-in"])),
+                int("secure" in u), int("account" in u),
+                int(any(w in u for w in ["verify","confirm","validate"])),
+                len(hostname), len(path), len(query), url.count("@"),
+                url.count("~"), url.count("%"), hostname_dots, hostname.count("-"),
+                sum(c.isdigit() for c in url) / max(len(url), 1),
+                sum(c.isdigit() for c in hostname) / max(len(hostname), 1),
+                int(url.lower().startswith("https://")),
+                int(bool(re.match(r"^\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}$", hostname))),
+                int(_up.port is not None and _up.port not in (80, 443)),
+                max(0, hostname_dots - 1),
+                int(tld in _SUSPICIOUS_TLDS),
+                path.count("/") - 1 if path else 0,
+                int("//" in path[1:]) if len(path) > 1 else 0,
+                int(hostname in {"bit.ly","goo.gl","tinyurl.com","t.co","is.gd","ow.ly","buff.ly"}),
+                int("update" in u),
+                int(any(w in u for w in ["suspend","locked","limited","restrict"])),
+                int(any(w in u for w in ["bank","paypal","wallet","billing"])),
+                brand_in_url, entropy,
+                sum(1 for w in _SUSP_WORDS if w in u),
+            ]
+        else:
+            feats = [
+                len(url), url.count('.'), url.count('/'), url.count('-'),
+                url.count('_'), url.count('?'), url.count('='), url.count('&'),
+                int('login' in u), int('secure' in u),
+                int('account' in u), int('verify' in u),
+            ]
         return np.array(feats, dtype=float).reshape(1, -1)
 
     def _html_features(self, content: str) -> np.ndarray:

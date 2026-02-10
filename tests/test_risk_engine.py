@@ -129,7 +129,8 @@ class TestDetectPaymentGateways:
 # ---------------------------------------------------------------------------
 
 class TestUrlFeatures:
-    def test_shape(self, engine):
+    def test_shape_legacy(self, engine):
+        """With ml_model=None, should return 12-feature legacy vector."""
         feats = engine._url_features("https://example.com")
         assert feats.shape == (1, 12)
 
@@ -141,6 +142,45 @@ class TestUrlFeatures:
     def test_no_login_flag(self, engine):
         feats = engine._url_features("https://example.com/home")
         assert feats[0, 8] == 0.0
+
+    def test_shape_enhanced(self, engine):
+        """With enhanced model (36 features), should return 36-feature vector."""
+        mock_model = MagicMock()
+        mock_model.num_features.return_value = 36
+        engine.ml_model = mock_model
+        feats = engine._url_features("https://example.com/login?user=test")
+        assert feats.shape == (1, 36)
+        engine.ml_model = None  # restore
+
+    def test_enhanced_features_content(self, engine):
+        """Verify specific features in the 36-feature vector."""
+        mock_model = MagicMock()
+        mock_model.num_features.return_value = 36
+        engine.ml_model = mock_model
+        feats = engine._url_features("https://example.com/login?user=test&action=verify")
+        # index 0 = url_length
+        assert feats[0, 0] == len("https://example.com/login?user=test&action=verify")
+        # index 8 = has_login (login is in URL)
+        assert feats[0, 8] == 1.0
+        # index 11 = has_verify (verify is in URL)
+        assert feats[0, 11] == 1.0
+        # index 22 = is_https
+        assert feats[0, 22] == 1.0
+        # index 23 = is_ip (not an IP)
+        assert feats[0, 23] == 0.0
+        engine.ml_model = None  # restore
+
+    def test_enhanced_ip_detection(self, engine):
+        """Verify IP address detection in enhanced features."""
+        mock_model = MagicMock()
+        mock_model.num_features.return_value = 36
+        engine.ml_model = mock_model
+        feats = engine._url_features("http://192.168.1.1/phishing")
+        # index 23 = is_ip
+        assert feats[0, 23] == 1.0
+        # index 22 = is_https (http, not https)
+        assert feats[0, 22] == 0.0
+        engine.ml_model = None  # restore
 
 
 # ---------------------------------------------------------------------------

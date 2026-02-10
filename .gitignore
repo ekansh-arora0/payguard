@@ -44,7 +44,9 @@ backend/mongodb_data/
 *.zip
 *.tar
 backend/cache/
-backend/models/
+backend/models/*
+# Whitelist production ML models inside backend/models/
+!backend/models/best_html_cnn.pt
 Phishing-Email-Dataset/
 dataset/
 data/
@@ -80,9 +82,20 @@ train_bert_nlp.py
 scam_detector.py
 SCAM_DETECTOR_GUIDE.md
 PayGuard_ScamDetector.scpt
-bert_phishing_detector/
+bert_phishing_detector/*
+# Whitelist BERT tokenizer files (not the 267MB model weights)
+!bert_phishing_detector/tokenizer_config.json
+!bert_phishing_detector/special_tokens_map.json
+!bert_phishing_detector/tokenizer.json
+!bert_phishing_detector/vocab.txt
+!bert_phishing_detector/config.json
 ml/
-models/
+models/*
+# Whitelist production ML models inside models/
+!models/best_excel_xgb.json
+!models/best_excel_xgb_scaler.pkl
+!models/url_feature_names.json
+!models/best_html_rf_current.pkl
 docs/
 
 *.log
