@@ -141,6 +141,8 @@ class APIKeyManager:
 
         # Check if we need to reset daily counter
         last_reset = api_key_doc.get("last_reset", datetime.now(timezone.utc))
+        if last_reset.tzinfo is None:
+            last_reset = last_reset.replace(tzinfo=timezone.utc)
         if datetime.now(timezone.utc) - last_reset > timedelta(days=1):
             await self.db.api_keys.update_one(
                 {"key_hash": key_hash},

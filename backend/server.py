@@ -119,8 +119,8 @@ async def root():
 async def health_check():
     """Health check endpoint with ML model readiness"""
     models_loaded = {
-        "xgboost": risk_engine.model is not None if hasattr(risk_engine, 'model') else False,
-        "cnn": risk_engine.cnn_model is not None if hasattr(risk_engine, 'cnn_model') else False,
+        "xgboost": risk_engine.ml_model is not None if hasattr(risk_engine, 'ml_model') else False,
+        "cnn": risk_engine.html_cnn is not None if hasattr(risk_engine, 'html_cnn') else False,
     }
     all_ready = any(models_loaded.values())
     return {
@@ -906,5 +906,7 @@ from starlette.responses import RedirectResponse
 @app.api_route("/api/{path:path}", methods=["GET", "POST", "PUT", "DELETE", "PATCH"], include_in_schema=False)
 async def legacy_api_redirect(path: str, request: Request):
     """Redirect unversioned /api/* requests to /api/v1/*."""
+    if path.startswith("v1/"):
+        return RedirectResponse(url="/api/v1/health", status_code=307)
     url = request.url.replace(path=f"/api/v1/{path}")
     return RedirectResponse(url=str(url), status_code=307)

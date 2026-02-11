@@ -8,7 +8,21 @@ from typing import Tuple, List, Optional
 from .models import RiskLevel, PaymentGateway, RiskScore, Merchant
 from .email_guardian import EmailGuardian
 import logging
+import sys
+import importlib
 import numpy as np
+# Shim numpy._core -> numpy.core for pickle compat (numpy 2.x pickles on 1.x runtime)
+if not hasattr(np, '_core'):
+    np._core = np.core                       # type: ignore[attr-defined]
+    sys.modules['numpy._core'] = np.core     # type: ignore[assignment]
+    for _sub in ('multiarray', 'numeric', '_multiarray_umath', 'umath', '_internal'):
+        _src = f'numpy.core.{_sub}'
+        _dst = f'numpy._core.{_sub}'
+        if _dst not in sys.modules:
+            try:
+                sys.modules[_dst] = importlib.import_module(_src)
+            except ImportError:
+                pass
 import joblib
 from pathlib import Path
 import httpx
@@ -141,7 +155,9 @@ class RiskScoringEngine:
         self.html_cnn_seq_len = 4096
         try:
             import torch
-            hp2 = Path(__file__).parent.parent / 'models' / 'best_html_cnn.pt'
+            hp2 = Path(__file__).parent / 'models' / 'best_html_cnn.pt'
+            if not hp2.exists():
+                hp2 = Path(__file__).parent.parent / 'models' / 'best_html_cnn.pt'
             if hp2.exists():
                 try:
                     self.html_cnn = torch.jit.load(str(hp2))
