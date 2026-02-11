@@ -4,18 +4,33 @@
 **/*.pyc
 **/*.pyo
 **/*.pyd
-.db
+*.db
 mongodb_data
-data/agent
-agent/screenshots
 venv
 .venv
 .env
-Dockerfile
-docker-compose.yml
+.env.example
+docker-compose*.yml
+Dockerfile*
 README.md
 QUICK_START.md
+
+# Test files
+tests/
 test_*.py
+backend/tests/
+backend/requirements-dev.txt
+
+# Scripts (training, backup, etc.)
+scripts/
+
+# Website / mockups / docs
+website/
+mockups/
+
+# Old / unused files
+payguard_menubar_app_old.py
+payguard_menubar_standalone.py
 
 # Large datasets and results
 dataset
@@ -29,7 +44,7 @@ vonDataset20180426.dill
 spam.csv
 tmp
 
-# DIRE data (keep models)
+# DIRE training data (keep model weights if present)
 DIRE/data/train
 DIRE/data/val
 DIRE/data/test
@@ -40,3 +55,11 @@ DIRE/data/celebahq
 # Backend large files
 backend/cache
 backend/mongodb_data
+
+# Git / CI
+.github/
+.gitattributes
+.gitignore
+
+# nginx (separate build context)
+nginx/
