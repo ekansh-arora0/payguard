@@ -125,6 +125,34 @@ class TestDetectPaymentGateways:
 
 
 # ---------------------------------------------------------------------------
+# _is_trusted_domain
+# ---------------------------------------------------------------------------
+
+class TestIsTrustedDomain:
+    def test_exact_match(self, engine):
+        assert engine._is_trusted_domain("amazon.com") is True
+
+    def test_www_subdomain(self, engine):
+        assert engine._is_trusted_domain("www.amazon.com") is True
+
+    def test_deep_subdomain(self, engine):
+        assert engine._is_trusted_domain("smile.www.amazon.com") is True
+
+    def test_unknown_domain(self, engine):
+        assert engine._is_trusted_domain("totallylegit-shop.xyz") is False
+
+    def test_none_domain(self, engine):
+        assert engine._is_trusted_domain(None) is False
+
+    def test_empty_domain(self, engine):
+        assert engine._is_trusted_domain("") is False
+
+    def test_partial_match_not_trusted(self, engine):
+        """amazon.com.evil.com should NOT match."""
+        assert engine._is_trusted_domain("amazon.com.evil.com") is False
+
+
+# ---------------------------------------------------------------------------
 # _url_features
 # ---------------------------------------------------------------------------
 

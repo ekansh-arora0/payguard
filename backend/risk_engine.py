@@ -52,7 +52,36 @@ class RiskScoringEngine:
         'stripe.com', 'paypal.com', 'square.com', 'authorize.net',
         'checkout.com', 'adyen.com', 'braintreepayments.com'
     ]
-    
+
+    # Trusted domains — well-known legitimate sites that should not be flagged
+    # as high risk. Apex domains; subdomains are matched automatically.
+    TRUSTED_DOMAINS = {
+        # Major retailers / e-commerce
+        'amazon.com', 'amazon.co.uk', 'amazon.de', 'amazon.co.jp',
+        'amazon.ca', 'amazon.fr', 'amazon.it', 'amazon.es',
+        'amazon.com.au', 'amazon.in', 'amazon.com.br',
+        'ebay.com', 'walmart.com', 'target.com', 'bestbuy.com',
+        'costco.com', 'etsy.com', 'shopify.com', 'aliexpress.com',
+        'wayfair.com', 'homedepot.com', 'lowes.com', 'macys.com',
+        'nordstrom.com', 'newegg.com', 'overstock.com',
+        # Major tech / platforms
+        'google.com', 'apple.com', 'microsoft.com', 'github.com',
+        'gitlab.com', 'stackoverflow.com', 'linkedin.com',
+        'facebook.com', 'instagram.com', 'twitter.com', 'x.com',
+        'youtube.com', 'reddit.com', 'wikipedia.org', 'netflix.com',
+        'spotify.com', 'zoom.us', 'slack.com', 'dropbox.com',
+        'salesforce.com', 'adobe.com', 'oracle.com', 'ibm.com',
+        'aws.amazon.com', 'cloud.google.com', 'azure.microsoft.com',
+        # Payment / banking
+        'paypal.com', 'stripe.com', 'square.com', 'venmo.com',
+        'chase.com', 'bankofamerica.com', 'wellsfargo.com',
+        'citibank.com', 'capitalone.com', 'americanexpress.com',
+        'visa.com', 'mastercard.com', 'discover.com',
+        # Other major brands
+        'nytimes.com', 'bbc.com', 'bbc.co.uk', 'cnn.com',
+        'washingtonpost.com', 'reuters.com', 'bloomberg.com',
+    }
+
     # Suspicious patterns
     SUSPICIOUS_PATTERNS = [
         r'verify-?account', r'secure-?login', r'update-?payment',
@@ -443,6 +472,11 @@ class RiskScoringEngine:
                     safety_indicators.extend(cs_safe)
                 except Exception:
                     pass
+            # Trusted domain boost — override ML false positives for well-known sites
+            if self._is_trusted_domain(domain) and not is_blacklisted:
+                trust_score = max(trust_score, 75.0)
+                if 'Trusted domain' not in ' '.join(safety_indicators):
+                    safety_indicators.append('Trusted well-known domain')
             if trust_score >= 65:
                 risk_level = RiskLevel.LOW
             elif trust_score >= 40:
@@ -547,6 +581,12 @@ class RiskScoringEngine:
                 trust_score -= 30
                 risk_factors.append("Domain flagged in fraud database")
             trust_score = max(0, min(100, trust_score))
+            # Trusted domain boost (heuristic path)
+            is_blacklisted_h = await self._is_blacklisted(domain, url)
+            if self._is_trusted_domain(domain) and not is_blacklisted_h:
+                trust_score = max(trust_score, 75.0)
+                if 'Trusted domain' not in ' '.join(safety_indicators):
+                    safety_indicators.append('Trusted well-known domain')
             # rely on combined signals; no fixed trust floor
             if trust_score >= 65:
                 risk_level = RiskLevel.LOW
@@ -1536,6 +1576,22 @@ class RiskScoringEngine:
         elif h.endswith('square.com'):
             detected.append(PaymentGateway.SQUARE)
         return detected
+
+    def _is_trusted_domain(self, domain: str) -> bool:
+        """Check if domain (or its apex) is in the trusted domains list."""
+        if not domain:
+            return False
+        d = domain.lower().lstrip('.')
+        # Direct match (e.g. amazon.com)
+        if d in self.TRUSTED_DOMAINS:
+            return True
+        # Subdomain match (e.g. www.amazon.com -> amazon.com)
+        parts = d.split('.')
+        for i in range(1, len(parts)):
+            apex = '.'.join(parts[i:])
+            if apex in self.TRUSTED_DOMAINS:
+                return True
+        return False
     
     def _has_suspicious_patterns(self, url: str, domain: Optional[str] = None) -> bool:
         """Check for suspicious patterns in URL"""

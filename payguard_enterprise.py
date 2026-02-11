@@ -310,7 +310,8 @@ class EnterpriseDB:
         
         # User count
         cursor.execute('SELECT user_count FROM organizations WHERE id = ?', (org_id,))
-        user_count = cursor.fetchone()[0]
+        row = cursor.fetchone()
+        user_count = row[0] if row else 0
         
         conn.close()
         

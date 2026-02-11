@@ -182,6 +182,14 @@ class TestEnterpriseStatsEndpoint:
         assert body["total_alerts"] == 0
         assert body["user_count"] == 1
 
+    def test_get_stats_nonexistent_org(self, ent_client, ent_db):
+        """Stats for an org that doesn't exist should return 200 with user_count=0."""
+        resp = ent_client.get("/api/stats/nonexistent_org", headers=AUTH_HEADER)
+        assert resp.status_code == 200
+        body = resp.json()
+        assert body["user_count"] == 0
+        assert body["total_alerts"] == 0
+
 
 class TestEnterpriseAlertsEndpoint:
     def test_get_alerts_empty(self, ent_client, ent_db):
