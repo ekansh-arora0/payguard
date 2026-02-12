@@ -1,0 +1,142 @@
+name: Build and Release
+
+on:
+  push:
+    tags:
+      - 'v*'
+  workflow_dispatch:
+
+jobs:
+  build-macos:
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v3
+      
+      - name: Set up Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.13'
+      
+      - name: Install dependencies
+        run: |
+          pip install pyinstaller rumps requests pillow pystray
+      
+      - name: Build macOS app
+        run: |
+          python3 -m PyInstaller \
+            --clean \
+            --noconfirm \
+            --windowed \
+            --name="PayGuard" \
+            --add-data="models:models" \
+            --hidden-import=rumps \
+            --hidden-import=requests \
+            --hidden-import=PIL \
+            payguard_menubar_app.py
+      
+      - name: Create ZIP
+        run: |
+          cd dist
+          zip -r PayGuard-${{ github.ref_name }}-macos.zip PayGuard.app
+      
+      - name: Upload artifact
+        uses: actions/upload-artifact@v3
+        with:
+          name: macos-build
+          path: dist/PayGuard-*.zip
+
+  build-windows:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v3
+      
+      - name: Set up Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.13'
+      
+      - name: Install dependencies
+        run: |
+          pip install pyinstaller pystray pillow requests
+      
+      - name: Build Windows exe
+        run: |
+          python -m PyInstaller `
+            --clean `
+            --noconfirm `
+            --windowed `
+            --name="PayGuard" `
+            --hidden-import=pystray `
+            --hidden-import=PIL `
+            --hidden-import=requests `
+            payguard_menubar_standalone.py
+      
+      - name: Create ZIP
+        run: |
+          cd dist
+          Compress-Archive -Path PayGuard.exe -DestinationPath PayGuard-${{ github.ref_name }}-windows.zip
+      
+      - name: Upload artifact
+        uses: actions/upload-artifact@v3
+        with:
+          name: windows-build
+          path: dist/PayGuard-*.zip
+
+  build-linux:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v3
+      
+      - name: Set up Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.13'
+      
+      - name: Install dependencies
+        run: |
+          pip install pyinstaller pystray pillow requests
+      
+      - name: Build Linux binary
+        run: |
+          python3 -m PyInstaller \
+            --clean \
+            --noconfirm \
+            --windowed \
+            --name="payguard" \
+            --hidden-import=pystray \
+            --hidden-import=PIL \
+            --hidden-import=requests \
+            payguard_menubar_standalone.py
+      
+      - name: Create tarball
+        run: |
+          cd dist
+          tar -czf PayGuard-${{ github.ref_name }}-linux.tar.gz payguard
+      
+      - name: Upload artifact
+        uses: actions/upload-artifact@v3
+        with:
+          name: linux-build
+          path: dist/PayGuard-*.tar.gz
+
+  release:
+    needs: [build-macos, build-windows, build-linux]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v3
+      
+      - name: Download all artifacts
+        uses: actions/download-artifact@v3
+      
+      - name: Create Release
+        uses: softprops/action-gh-release@v1
+        with:
+          files: |
+            macos-build/*.zip
+            windows-build/*.zip
+            linux-build/*.tar.gz
+          draft: false
+          prerelease: true
+          generate_release_notes: true
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

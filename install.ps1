@@ -1,82 +1,62 @@
 # PayGuard Windows Installer
-# Usage: Invoke-WebRequest -Uri "https://payguard.com/install.ps1" -UseBasicParsing | Invoke-Expression
+# Usage: irm https://payguard.com/install.ps1 | iex
 
 $ErrorActionPreference = "Stop"
 
-Write-Host "🛡️  PayGuard Installer for Windows" -ForegroundColor Cyan
+Write-Host "🛡️  PayGuard Installer" -ForegroundColor Cyan
 Write-Host ""
 
-# Detect architecture
 $arch = if ([Environment]::Is64BitOperatingSystem) { "amd64" } else { "386" }
 Write-Host "📱 Detected: Windows ($arch)" -ForegroundColor Blue
 
-# Set paths
-$version = "1.0.0"
+$version = "${env:VERSION:-1.0.0}"
+$repo = "payguard/payguard"
 $installDir = "$env:LOCALAPPDATA\PayGuard"
-$downloadUrl = "https://github.com/payguard/payguard/releases/download/v$version/payguard-windows-$arch.exe"
+$downloadUrl = "https://github.com/$repo/releases/download/v$version/PayGuard-v$version-windows.zip"
 
-# Create install directory
 New-Item -ItemType Directory -Force -Path $installDir | Out-Null
 
 Write-Host "📥 Downloading PayGuard v$version..." -ForegroundColor Blue
-Write-Host "   From: $downloadUrl" -ForegroundColor Gray
 
 try {
-    # Download using different methods for compatibility
-    if (Get-Command 'Invoke-WebRequest' -ErrorAction SilentlyContinue) {
-        Invoke-WebRequest -Uri $downloadUrl -OutFile "$installDir\payguard.exe" -UseBasicParsing
-    } else {
-        # Fallback for older Windows
-        $webClient = New-Object System.Net.WebClient
-        $webClient.DownloadFile($downloadUrl, "$installDir\payguard.exe")
-    }
+    $tempFile = "$env:TEMP\PayGuard.zip"
+    Invoke-WebRequest -Uri $downloadUrl -OutFile $tempFile -UseBasicParsing
+    
+    Write-Host "📦 Extracting..." -ForegroundColor Blue
+    Expand-Archive -Path $tempFile -DestinationPath $installDir -Force
+    Remove-Item $tempFile
 } catch {
-    Write-Host "❌ Download failed. Please check your internet connection." -ForegroundColor Red
+    Write-Host "❌ Download failed: $_" -ForegroundColor Red
     exit 1
 }
 
-Write-Host "📦 Installing to $installDir..." -ForegroundColor Blue
+Write-Host "✅ Installed to $installDir" -ForegroundColor Green
 
-# Add to PATH if not already there
+# Add to PATH
 $userPath = [Environment]::GetEnvironmentVariable("Path", "User")
 if ($userPath -notlike "*$installDir*") {
     [Environment]::SetEnvironmentVariable("Path", "$userPath;$installDir", "User")
-    Write-Host "📝 Added $installDir to PATH" -ForegroundColor Green
+    Write-Host "📝 Added to PATH" -ForegroundColor Green
 }
 
-# Create Start Menu shortcut
-$startMenu = "$env:APPDATA\Microsoft\Windows\Start Menu\Programs"
-$shortcutPath = "$startMenu\PayGuard.lnk"
+# Create shortcuts
 $WshShell = New-Object -comObject WScript.Shell
-$Shortcut = $WshShell.CreateShortcut($shortcutPath)
-$Shortcut.TargetPath = "$installDir\payguard.exe"
-$Shortcut.WorkingDirectory = $installDir
-$Shortcut.Description = "PayGuard - Phishing Protection"
+$startMenu = "$env:APPDATA\Microsoft\Windows\Start Menu\Programs"
+
+$Shortcut = $WshShell.CreateShortcut("$startMenu\PayGuard.lnk")
+$Shortcut.TargetPath = "$installDir\PayGuard.exe"
 $Shortcut.Save()
 
-# Also add to startup
-$startupPath = "$env:APPDATA\Microsoft\Windows\Start Menu\Programs\Startup\PayGuard.lnk"
-$StartupShortcut = $WshShell.CreateShortcut($startupPath)
-$StartupShortcut.TargetPath = "$installDir\payguard.exe"
-$StartupShortcut.WorkingDirectory = $installDir
+$StartupShortcut = $WshShell.CreateShortcut("$env:APPDATA\Microsoft\Windows\Start Menu\Programs\Startup\PayGuard.lnk")
+$StartupShortcut.TargetPath = "$installDir\PayGuard.exe"
 $StartupShortcut.Save()
 
-Write-Host "✅ Installed to $installDir" -ForegroundColor Green
 Write-Host ""
 Write-Host "🚀 Starting PayGuard..." -ForegroundColor Blue
-
-# Start PayGuard
-Start-Process -FilePath "$installDir\payguard.exe"
+Start-Process -FilePath "$installDir\PayGuard.exe"
 
 Write-Host ""
-Write-Host "✨ PayGuard is now running!" -ForegroundColor Green
+Write-Host "✨ PayGuard is running!" -ForegroundColor Green
+Write-Host "Look for the shield icon in your system tray" -ForegroundColor White
 Write-Host ""
-Write-Host "📋 Next steps:" -ForegroundColor White
-Write-Host "   1. Look for the PayGuard shield icon in your system tray"
-Write-Host "   2. Right-click it to configure your settings"
-Write-Host "   3. Browse safely - we'll warn you about suspicious sites"
-Write-Host ""
-Write-Host "💡 Tip: Open a new PowerShell window and run 'payguard --help' for options" -ForegroundColor Gray
-Write-Host ""
-Write-Host "🐛 Found a bug? Report it at: https://github.com/payguard/payguard/issues" -ForegroundColor Gray
-Write-Host "❤️  Enjoying PayGuard? Star us on GitHub!" -ForegroundColor Gray
+Write-Host "❤️  Star us: https://github.com/payguard/payguard" -ForegroundColor Gray

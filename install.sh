@@ -1,66 +1,79 @@
 #!/bin/bash
-# PayGuard Quick Install Script
+# PayGuard macOS/Linux Installer
+# Usage: curl -fsSL https://payguard.com/install.sh | bash
 
-echo "🛡️ PayGuard Installer"
-echo "====================="
+set -e
 
-# Check Python
-if ! command -v python3 &> /dev/null; then
-    echo "❌ Python 3 not found. Please install Python 3.9+ first."
+RED='\033[0;31m'
+GREEN='\033[0;32m'
+BLUE='\033[0;34m'
+NC='\033[0m'
+
+echo -e "${BLUE}🛡️  PayGuard Installer${NC}"
+echo ""
+
+OS="$(uname -s)"
+ARCH="$(uname -m)"
+
+if [ "$OS" = "Darwin" ]; then
+    PLATFORM="macos"
+    echo "📱 Detected: macOS ($ARCH)"
+elif [ "$OS" = "Linux" ]; then
+    PLATFORM="linux"
+    echo "🐧 Detected: Linux ($ARCH)"
+else
+    echo -e "${RED}❌ Unsupported OS: $OS${NC}"
     exit 1
 fi
 
-# Create app directory
-APP_DIR="$HOME/.payguard"
-mkdir -p "$APP_DIR"
+VERSION="${VERSION:-1.0.0}"
+GITHUB_REPO="payguard/payguard"
 
-# Download/copy files
-echo "📥 Installing PayGuard..."
-cd "$APP_DIR"
+echo "📥 Downloading PayGuard v${VERSION}..."
 
-# Install dependencies
-echo "📦 Installing dependencies..."
-python3 -m pip install --user -q rumps requests pillow scikit-learn pandas numpy
-
-# Copy main files
-cp -r /Users/ekans/payguard/payguard_menubar_app.py "$APP_DIR/"
-cp -r /Users/ekans/payguard/payguard_ml_benchmark.py "$APP_DIR/"
-cp -r /Users/ekans/payguard/payguard_threat_intel.py "$APP_DIR/"
-cp -r /Users/ekans/payguard/trained_models "$APP_DIR/" 2>/dev/null || true
-
-# Create launch agent for auto-start
-PLIST_PATH="$HOME/Library/LaunchAgents/com.payguard.app.plist"
-cat > "$PLIST_PATH" << 'PLIST'
-<?xml version="1.0" encoding="UTF-8"?>
-<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
-<plist version="1.0">
-<dict>
-    <key>Label</key>
-    <string>com.payguard.app</string>
-    <key>ProgramArguments</key>
-    <array>
-        <string>/usr/bin/python3</string>
-        <string>$HOME/.payguard/payguard_menubar_app.py</string>
-    </array>
-    <key>RunAtLoad</key>
-    <true/>
-    <key>KeepAlive</key>
-    <true/>
-    <key>StandardOutPath</key>
-    <string>$HOME/.payguard/payguard.log</string>
-    <key>StandardErrorPath</key>
-    <string>$HOME/.payguard/payguard.err</string>
-</dict>
-</plist>
-PLIST
-
-# Load the agent
-launchctl load "$PLIST_PATH"
+if [ "$PLATFORM" = "macos" ]; then
+    DOWNLOAD_URL="https://github.com/${GITHUB_REPO}/releases/download/v${VERSION}/PayGuard-v${VERSION}-macos.zip"
+    INSTALL_DIR="/Applications"
+    
+    # Download to temp
+    TEMP_DIR=$(mktemp -d)
+    curl -fsSL "$DOWNLOAD_URL" -o "$TEMP_DIR/PayGuard.zip"
+    
+    echo "📦 Extracting..."
+    unzip -q "$TEMP_DIR/PayGuard.zip" -d "$TEMP_DIR"
+    
+    echo "🚀 Installing to Applications..."
+    cp -R "$TEMP_DIR/PayGuard.app" "$INSTALL_DIR/"
+    rm -rf "$TEMP_DIR"
+    
+    echo "✅ Installed to /Applications/PayGuard.app"
+    echo ""
+    echo "🚀 Starting PayGuard..."
+    open "$INSTALL_DIR/PayGuard.app"
+    
+else
+    # Linux
+    DOWNLOAD_URL="https://github.com/${GITHUB_REPO}/releases/download/v${VERSION}/PayGuard-v${VERSION}-linux.tar.gz"
+    INSTALL_DIR="$HOME/.local/bin"
+    mkdir -p "$INSTALL_DIR"
+    
+    curl -fsSL "$DOWNLOAD_URL" | tar -xz -C "$INSTALL_DIR"
+    chmod +x "$INSTALL_DIR/payguard"
+    
+    # Add to PATH
+    if [[ ":$PATH:" != *":$INSTALL_DIR:"* ]]; then
+        echo 'export PATH="$HOME/.local/bin:$PATH"' >> ~/.bashrc
+        echo "📝 Added to PATH"
+    fi
+    
+    echo "✅ Installed to $INSTALL_DIR/payguard"
+    echo ""
+    echo "🚀 Starting PayGuard..."
+    "$INSTALL_DIR/payguard" &
+fi
 
 echo ""
-echo "✅ PayGuard installed successfully!"
+echo -e "${GREEN}✨ PayGuard is running!${NC}"
 echo ""
-echo "🛡️ PayGuard is now running in your menu bar."
-echo "   Click the shield icon (🛡️) to access features."
-echo ""
-echo "To uninstall: ~/.payguard/uninstall.sh"
+echo "Look for the shield icon in your menu bar/system tray"
+echo "❤️  Enjoying PayGuard? Star us: https://github.com/payguard/payguard"
