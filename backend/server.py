@@ -1,5 +1,6 @@
 from fastapi import FastAPI, APIRouter, HTTPException, Depends, Security, UploadFile, File, Request
 from fastapi.security import APIKeyHeader
+from fastapi.responses import Response
 from dotenv import load_dotenv
 from starlette.middleware.cors import CORSMiddleware
 from motor.motor_asyncio import AsyncIOMotorClient
@@ -39,16 +40,90 @@ db = client[os.environ['DB_NAME']]
 risk_engine = RiskScoringEngine(db)
 api_key_manager = APIKeyManager(db)
 
+# Track active requests for graceful shutdown
+_active_requests = 0
+_shutdown_event = False
+
 # Lifespan handler (replaces deprecated on_event)
 @asynccontextmanager
 async def lifespan(app):
+    global _shutdown_event
     logger.info("PayGuard API started")
+    
+    # Seed merchant data if empty
+    await _seed_merchant_data()
+    
     yield
-    logger.info("Shutting down — closing database connection")
+    
+    # Graceful shutdown
+    logger.info("Shutdown initiated — waiting for active requests...")
+    _shutdown_event = True
+    
+    # Wait up to 30 seconds for active requests to complete
+    import asyncio
+    for i in range(30):
+        if _active_requests == 0:
+            break
+        logger.info(f"Waiting for {_active_requests} active requests...")
+        await asyncio.sleep(1)
+    
+    if _active_requests > 0:
+        logger.warning(f"Force shutdown with {_active_requests} requests still active")
+    
+    logger.info("Closing database connection")
     client.close()
+    logger.info("Shutdown complete")
+
+
+async def _seed_merchant_data():
+    """Seed merchant reputation data for trusted domains"""
+    try:
+        # Check if merchants collection is empty
+        count = await db.merchants.count_documents({})
+        if count > 0:
+            return
+        
+        logger.info("Seeding merchant reputation data...")
+        trusted_merchants = [
+            {"domain": "amazon.com", "name": "Amazon", "reputation_score": 95.0, "verified": True, "fraud_reports": 0, "total_reports": 1000000},
+            {"domain": "google.com", "name": "Google", "reputation_score": 98.0, "verified": True, "fraud_reports": 10, "total_reports": 5000000},
+            {"domain": "microsoft.com", "name": "Microsoft", "reputation_score": 96.0, "verified": True, "fraud_reports": 50, "total_reports": 2000000},
+            {"domain": "apple.com", "name": "Apple", "reputation_score": 97.0, "verified": True, "fraud_reports": 5, "total_reports": 3000000},
+            {"domain": "paypal.com", "name": "PayPal", "reputation_score": 92.0, "verified": True, "fraud_reports": 100, "total_reports": 1500000},
+            {"domain": "stripe.com", "name": "Stripe", "reputation_score": 94.0, "verified": True, "fraud_reports": 20, "total_reports": 800000},
+            {"domain": "github.com", "name": "GitHub", "reputation_score": 93.0, "verified": True, "fraud_reports": 15, "total_reports": 600000},
+            {"domain": "ebay.com", "name": "eBay", "reputation_score": 85.0, "verified": True, "fraud_reports": 500, "total_reports": 1000000},
+            {"domain": "walmart.com", "name": "Walmart", "reputation_score": 88.0, "verified": True, "fraud_reports": 200, "total_reports": 900000},
+            {"domain": "chase.com", "name": "Chase Bank", "reputation_score": 90.0, "verified": True, "fraud_reports": 50, "total_reports": 500000},
+        ]
+        
+        for merchant in trusted_merchants:
+            merchant["updated_at"] = datetime.now(timezone.utc)
+            await db.merchants.update_one(
+                {"domain": merchant["domain"]},
+                {"$set": merchant},
+                upsert=True
+            )
+        
+        logger.info(f"Seeded {len(trusted_merchants)} merchants")
+    except Exception as e:
+        logger.error(f"Failed to seed merchant data: {e}")
 
 # Create the main app
 app = FastAPI(title="PayGuard API", version="1.0", lifespan=lifespan)
+
+# Request tracking middleware for graceful shutdown
+@app.middleware("http")
+async def track_requests(request: Request, call_next):
+    global _active_requests, _shutdown_event
+    if _shutdown_event:
+        return Response("Service is shutting down", status_code=503)
+    _active_requests += 1
+    try:
+        response = await call_next(request)
+        return response
+    finally:
+        _active_requests -= 1
 
 # Create router with /api/v1 prefix (versioned API)
 api_router = APIRouter(prefix="/api/v1")
@@ -141,8 +216,8 @@ async def check_risk(
     Main endpoint to check risk score for a URL.
     This is where the ML model will be plugged in later.
     """
+    t0 = time.time()
     try:
-        t0 = time.time()
         await api_key_manager.validate_api_key(api_key)
         
         logger.info(f"Checking risk for URL: {request.url}")
@@ -178,6 +253,7 @@ async def check_risk(
             "latency_ms": int((time.time() - t0) * 1000),
             "timestamp": datetime.now(timezone.utc)
         })
+        _record_request("/risk", 200, time.time() - t0, risk_score.risk_level.value)
         
         # Update merchant record
         await _update_merchant_record(risk_score)
@@ -185,6 +261,7 @@ async def check_risk(
         return risk_score
         
     except Exception as e:
+        _record_request("/risk", 500, time.time() - t0)
         logger.error(f"Error checking risk: {str(e)}")
         raise HTTPException(status_code=500, detail="Risk check failed")
 
@@ -855,8 +932,9 @@ async def check_risk_with_content(
     request: ContentRiskRequest,
     api_key: str = Depends(require_api_key)
 ):
+    """Check risk with explicit HTML content (for browser extension with page source)"""
+    t0 = time.time()
     try:
-        t0 = time.time()
         await api_key_manager.validate_api_key(api_key)
         # short-term cache to stabilize scores for dynamic pages
         recent_check = await db.risk_checks.find_one(
@@ -881,9 +959,11 @@ async def check_risk_with_content(
             "latency_ms": int((time.time() - t0) * 1000),
             "timestamp": datetime.now(timezone.utc)
         })
+        _record_request("/risk/content", 200, time.time() - t0, risk_score.risk_level.value)
         await _update_merchant_record(risk_score)
         return risk_score
     except Exception as e:
+        _record_request("/risk/content", 500, time.time() - t0)
         logger.error(f"Error checking risk with content: {str(e)}")
         raise HTTPException(status_code=500, detail="Failed to check content risk")
 @api_router.get("/fast-validate")
@@ -897,6 +977,68 @@ async def fast_validate(url: str):
 
 # Include versioned router
 app.include_router(api_router)
+
+
+# ============ Prometheus Metrics ============
+# Lightweight in-memory metrics (no prometheus_client dependency)
+from collections import defaultdict
+import threading
+
+_metrics_lock = threading.Lock()
+_request_counts = defaultdict(lambda: defaultdict(int))
+_request_duration_buckets = defaultdict(lambda: defaultdict(list))
+_risk_level_counts = defaultdict(int)
+_model_loaded = {"xgboost": False, "cnn": False}
+
+@app.get("/api/v1/metrics", include_in_schema=False)
+async def metrics():
+    """Prometheus-format metrics endpoint"""
+    lines = []
+    
+    # Request counters
+    lines.append("# HELP payguard_requests_total Total requests")
+    lines.append("# TYPE payguard_requests_total counter")
+    with _metrics_lock:
+        for endpoint, statuses in _request_counts.items():
+            for status, count in statuses.items():
+                lines.append(f'payguard_requests_total{{endpoint="{endpoint}",status="{status}"}} {count}')
+        
+        # Risk level counters
+        lines.append("# HELP payguard_risk_checks_total Risk checks by level")
+        lines.append("# TYPE payguard_risk_checks_total counter")
+        for level, count in _risk_level_counts.items():
+            lines.append(f'payguard_risk_checks_total{{risk_level="{level}"}} {count}')
+        
+        # Model health
+        lines.append("# HELP payguard_model_loaded Model loaded status")
+        lines.append("# TYPE payguard_model_loaded gauge")
+        for model, loaded in _model_loaded.items():
+            lines.append(f'payguard_model_loaded{{model="{model}"}} {int(loaded)}')
+    
+    # Process metrics (from psutil if available, else skip)
+    try:
+        import psutil
+        proc = psutil.Process()
+        mem = proc.memory_info()
+        lines.append("# HELP process_resident_memory_bytes Resident memory")
+        lines.append("# TYPE process_resident_memory_bytes gauge")
+        lines.append(f"process_resident_memory_bytes {mem.rss}")
+    except ImportError:
+        pass
+    
+    return Response("\n".join(lines), media_type="text/plain")
+
+
+def _record_request(endpoint: str, status: int, duration: float, risk_level: Optional[str] = None):
+    """Record metrics for a request"""
+    with _metrics_lock:
+        _request_counts[endpoint][str(status)] += 1
+        if risk_level:
+            _risk_level_counts[risk_level] += 1
+
+# Update model status on startup
+_model_loaded["xgboost"] = risk_engine.ml_model is not None
+_model_loaded["cnn"] = risk_engine.html_cnn is not None
 
 
 # Legacy /api/* redirect → /api/v1/*  (backwards compatibility)

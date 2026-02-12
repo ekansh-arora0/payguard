@@ -1540,7 +1540,7 @@ class RiskScoringEngine:
             return False
     
     async def _check_domain_age(self, domain: str) -> Optional[int]:
-        """Check domain age using WHOIS"""
+        """Check domain age using WHOIS with fallback for trusted domains"""
         try:
             import whois
             w = await self._run_blocking(lambda: whois.whois(domain))
@@ -1562,6 +1562,10 @@ class RiskScoringEngine:
             return max(0, delta.days)
         except Exception as e:
             logger.debug(f"WHOIS lookup failed for {domain}: {e}")
+            # Fallback: return conservative estimate for trusted domains
+            if self._is_trusted_domain(domain):
+                logger.debug(f"Using fallback age for trusted domain: {domain}")
+                return 1825  # ~5 years for trusted domains
             return None
     
     def _detect_payment_gateways(self, url: str, domain: str) -> List[PaymentGateway]:

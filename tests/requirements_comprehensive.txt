@@ -1,0 +1,73 @@
+# PayGuard Comprehensive Test Suite Requirements
+# Install with: pip install -r tests/requirements_comprehensive.txt
+
+# Core testing framework
+pytest>=7.4.0
+pytest-asyncio>=0.21.0
+pytest-cov>=4.1.0
+pytest-xdist>=3.3.0  # Parallel test execution
+pytest-mock>=3.11.0
+pytest-timeout>=2.1.0
+
+# Property-based testing
+hypothesis>=6.82.0
+
+# HTTP and async testing
+aiohttp>=3.8.0
+httpx>=0.24.0
+requests>=2.31.0
+
+# Performance and system monitoring
+psutil>=5.9.0
+memory-profiler>=0.60.0
+
+# Image processing (for testing image generation)
+Pillow>=10.0.0
+
+# Data handling and validation
+pydantic>=2.0.0
+
+# Code quality tools
+flake8>=6.0.0
+mypy>=1.5.0
+black>=23.7.0
+isort>=5.12.0
+
+# Security testing
+bandit>=1.7.0
+safety>=2.3.0
+
+# Documentation and reporting
+coverage>=7.3.0
+pytest-html>=3.2.0
+pytest-json-report>=1.5.0
+
+# Development utilities
+ipython>=8.14.0
+jupyter>=1.0.0
+
+# Mock and testing utilities
+responses>=0.23.0
+freezegun>=1.2.0
+factory-boy>=3.3.0
+
+# Performance profiling
+py-spy>=0.3.14
+line-profiler>=4.1.0
+
+# Load testing
+locust>=2.16.0
+
+# Database testing (if needed)
+pytest-postgresql>=5.0.0
+pytest-mongodb>=2.4.0
+
+# Environment management
+python-dotenv>=1.0.0
+
+# Logging and debugging
+colorlog>=6.7.0
+rich>=13.5.0
+
+# Type checking and validation
+typeguard>=4.1.0

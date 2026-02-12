@@ -1,0 +1,488 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>PayGuard Extension Preview</title>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+      background: #1a1a1a;
+      color: white;
+      padding: 40px;
+      min-height: 100vh;
+    }
+    h1 { font-size: 28px; font-weight: 600; margin-bottom: 8px; }
+    .subtitle { color: #71717a; margin-bottom: 40px; }
+    .mockups { display: grid; grid-template-columns: repeat(auto-fit, minmax(320px, 1fr)); gap: 40px; }
+    .mockup-group { margin-bottom: 60px; }
+    .mockup-label { font-size: 12px; color: #52525b; text-transform: uppercase; letter-spacing: 1px; margin-bottom: 12px; }
+    
+    /* Extension Popup */
+    .popup {
+      width: 320px;
+      background: #0a0a0a;
+      border-radius: 12px;
+      border: 1px solid #27272a;
+      overflow: hidden;
+      box-shadow: 0 25px 50px -12px rgba(0,0,0,0.5);
+    }
+    .popup-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 16px;
+      border-bottom: 1px solid #27272a50;
+    }
+    .popup-logo {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      font-weight: 600;
+    }
+    .shield { color: #10b981; }
+    .status {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      font-size: 13px;
+      color: #10b981;
+    }
+    .status-dot { width: 6px; height: 6px; background: #10b981; border-radius: 50%; }
+    .popup-body { padding: 16px; }
+    .current-page {
+      background: #18181b;
+      padding: 12px;
+      border-radius: 8px;
+      margin-bottom: 16px;
+    }
+    .current-page-status {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      font-size: 14px;
+      margin-bottom: 4px;
+    }
+    .check { color: #10b981; }
+    .current-page-url { font-size: 12px; color: #71717a; }
+    .stats-title { font-size: 12px; color: #71717a; margin-bottom: 12px; }
+    .stats-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; margin-bottom: 16px; }
+    .stat {
+      background: #18181b;
+      padding: 12px 8px;
+      border-radius: 6px;
+      text-align: center;
+    }
+    .stat-value { font-size: 20px; font-weight: 600; }
+    .stat-label { font-size: 10px; color: #71717a; margin-top: 4px; }
+    .threats-title { font-size: 12px; color: #71717a; margin-bottom: 8px; }
+    .threat-item {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 8px 0;
+      border-bottom: 1px solid #27272a30;
+      font-size: 13px;
+    }
+    .threat-item:last-child { border: none; }
+    .threat-domain { color: #a1a1aa; }
+    .threat-badge {
+      font-size: 11px;
+      padding: 2px 8px;
+      border-radius: 4px;
+    }
+    .badge-blocked { background: #7f1d1d; color: #fca5a5; }
+    .badge-warned { background: #78350f; color: #fcd34d; }
+    .popup-actions {
+      display: flex;
+      gap: 8px;
+      padding: 12px 16px;
+      border-top: 1px solid #27272a50;
+    }
+    .btn {
+      flex: 1;
+      padding: 8px;
+      border-radius: 6px;
+      border: 1px solid #27272a;
+      background: #18181b;
+      color: white;
+      font-size: 12px;
+      cursor: pointer;
+    }
+    .btn:hover { background: #27272a; }
+    
+    /* Warning Banner */
+    .banner {
+      background: #451a03;
+      border: 1px solid #78350f;
+      border-radius: 8px;
+      padding: 16px;
+      max-width: 600px;
+    }
+    .banner-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      margin-bottom: 8px;
+    }
+    .banner-title {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      font-weight: 500;
+    }
+    .banner-close { color: #92400e; cursor: pointer; font-size: 18px; }
+    .banner-details { font-size: 13px; color: #fcd34d; margin-bottom: 12px; }
+    .banner-actions { display: flex; gap: 8px; }
+    .btn-danger {
+      background: #dc2626;
+      border: none;
+      padding: 8px 16px;
+      border-radius: 6px;
+      color: white;
+      font-size: 13px;
+      cursor: pointer;
+    }
+    .btn-outline {
+      background: transparent;
+      border: 1px solid #78350f;
+      padding: 8px 16px;
+      border-radius: 6px;
+      color: #fcd34d;
+      font-size: 13px;
+      cursor: pointer;
+    }
+    
+    /* Block Page */
+    .block-page {
+      background: #0a0a0a;
+      border-radius: 12px;
+      border: 1px solid #27272a;
+      padding: 60px 40px;
+      text-align: center;
+      max-width: 500px;
+    }
+    .block-icon { font-size: 48px; margin-bottom: 24px; }
+    .block-title { font-size: 24px; font-weight: 600; margin-bottom: 16px; }
+    .block-desc { color: #71717a; margin-bottom: 24px; line-height: 1.6; }
+    .block-details {
+      background: #18181b;
+      padding: 16px;
+      border-radius: 8px;
+      text-align: left;
+      margin-bottom: 24px;
+    }
+    .block-detail-row {
+      display: flex;
+      justify-content: space-between;
+      padding: 6px 0;
+      font-size: 13px;
+    }
+    .block-detail-label { color: #71717a; }
+    .block-detail-value { color: #ef4444; }
+    .block-actions { display: flex; gap: 12px; justify-content: center; }
+    .btn-primary {
+      background: white;
+      color: black;
+      padding: 10px 20px;
+      border-radius: 6px;
+      border: none;
+      font-size: 13px;
+      font-weight: 500;
+      cursor: pointer;
+    }
+    .btn-ghost {
+      background: transparent;
+      color: #71717a;
+      padding: 10px 20px;
+      border-radius: 6px;
+      border: none;
+      font-size: 13px;
+      cursor: pointer;
+    }
+    
+    /* Toolbar Icons */
+    .toolbar-icons {
+      display: flex;
+      gap: 24px;
+      flex-wrap: wrap;
+    }
+    .toolbar-item {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 8px;
+    }
+    .toolbar-icon {
+      width: 32px;
+      height: 32px;
+      background: #18181b;
+      border-radius: 6px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 16px;
+      position: relative;
+    }
+    .toolbar-dot {
+      position: absolute;
+      top: -2px;
+      right: -2px;
+      width: 8px;
+      height: 8px;
+      border-radius: 50%;
+    }
+    .dot-green { background: #10b981; }
+    .dot-yellow { background: #f59e0b; }
+    .dot-red { background: #ef4444; }
+    .toolbar-label { font-size: 11px; color: #71717a; }
+    
+    /* Settings */
+    .settings {
+      width: 320px;
+      background: #0a0a0a;
+      border-radius: 12px;
+      border: 1px solid #27272a;
+      overflow: hidden;
+    }
+    .settings-header {
+      padding: 16px;
+      border-bottom: 1px solid #27272a50;
+      font-weight: 600;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+    .settings-section {
+      padding: 16px;
+      border-bottom: 1px solid #27272a30;
+    }
+    .settings-section:last-of-type { border: none; }
+    .settings-section-title { font-size: 12px; color: #71717a; margin-bottom: 12px; }
+    .setting-row {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 8px 0;
+    }
+    .setting-label { font-size: 13px; }
+    .toggle {
+      width: 36px;
+      height: 20px;
+      background: #27272a;
+      border-radius: 10px;
+      position: relative;
+      cursor: pointer;
+    }
+    .toggle.on { background: #10b981; }
+    .toggle::after {
+      content: '';
+      position: absolute;
+      width: 16px;
+      height: 16px;
+      background: white;
+      border-radius: 50%;
+      top: 2px;
+      left: 2px;
+      transition: 0.2s;
+    }
+    .toggle.on::after { left: 18px; }
+    .settings-footer {
+      display: flex;
+      gap: 8px;
+      padding: 12px 16px;
+      border-top: 1px solid #27272a50;
+    }
+  </style>
+</head>
+<body>
+  <h1>PayGuard Browser Extension</h1>
+  <p class="subtitle">Cross-platform security plugin mockups</p>
+  
+  <div class="mockups">
+    <!-- Extension Popup -->
+    <div class="mockup-group">
+      <div class="mockup-label">Extension Popup</div>
+      <div class="popup">
+        <div class="popup-header">
+          <div class="popup-logo">
+            <span class="shield">🛡️</span>
+            PayGuard
+          </div>
+          <div class="status">
+            <span class="status-dot"></span>
+            Protected
+          </div>
+        </div>
+        <div class="popup-body">
+          <div class="current-page">
+            <div class="current-page-status">
+              <span class="check">✓</span>
+              Current Page: Safe
+            </div>
+            <div class="current-page-url">paypal.com</div>
+          </div>
+          
+          <div class="stats-title">Today's Stats</div>
+          <div class="stats-grid">
+            <div class="stat">
+              <div class="stat-value">47</div>
+              <div class="stat-label">Scans</div>
+            </div>
+            <div class="stat">
+              <div class="stat-value">2</div>
+              <div class="stat-label">Blocked</div>
+            </div>
+            <div class="stat">
+              <div class="stat-value">1</div>
+              <div class="stat-label">Warnings</div>
+            </div>
+          </div>
+          
+          <div class="threats-title">Recent Threats</div>
+          <div class="threat-item">
+            <span class="threat-domain">paypa1-login.com</span>
+            <span class="threat-badge badge-blocked">Blocked</span>
+          </div>
+          <div class="threat-item">
+            <span class="threat-domain">suspicious-deal.net</span>
+            <span class="threat-badge badge-warned">Warned</span>
+          </div>
+        </div>
+        <div class="popup-actions">
+          <button class="btn">Scan Page</button>
+          <button class="btn">Settings</button>
+          <button class="btn">Help</button>
+        </div>
+      </div>
+    </div>
+    
+    <!-- Settings Panel -->
+    <div class="mockup-group">
+      <div class="mockup-label">Settings Panel</div>
+      <div class="settings">
+        <div class="settings-header">
+          <span class="shield">🛡️</span>
+          Settings
+        </div>
+        <div class="settings-section">
+          <div class="settings-section-title">Protection</div>
+          <div class="setting-row">
+            <span class="setting-label">Real-time scanning</span>
+            <div class="toggle on"></div>
+          </div>
+          <div class="setting-row">
+            <span class="setting-label">Block phishing sites</span>
+            <div class="toggle on"></div>
+          </div>
+          <div class="setting-row">
+            <span class="setting-label">Warn on suspicious pages</span>
+            <div class="toggle on"></div>
+          </div>
+        </div>
+        <div class="settings-section">
+          <div class="settings-section-title">Notifications</div>
+          <div class="setting-row">
+            <span class="setting-label">Show banner alerts</span>
+            <div class="toggle on"></div>
+          </div>
+          <div class="setting-row">
+            <span class="setting-label">Desktop notifications</span>
+            <div class="toggle"></div>
+          </div>
+        </div>
+        <div class="settings-footer">
+          <button class="btn">Reset</button>
+          <button class="btn" style="flex:2; background:#10b981; border:none;">Save</button>
+        </div>
+      </div>
+    </div>
+  </div>
+  
+  <div style="margin-top: 60px;">
+    <div class="mockup-label">Warning Banner (appears at top of suspicious pages)</div>
+    <div class="banner">
+      <div class="banner-header">
+        <div class="banner-title">
+          ⚠️ PayGuard Warning: This page resembles a fake PayPal login
+        </div>
+        <span class="banner-close">×</span>
+      </div>
+      <div class="banner-details">
+        Risk Level: HIGH • Detected: Fake login form • Domain registered 2 days ago
+      </div>
+      <div class="banner-actions">
+        <button class="btn-danger">Leave Page</button>
+        <button class="btn-outline">View Details</button>
+        <button class="btn-outline">Trust Anyway</button>
+      </div>
+    </div>
+  </div>
+  
+  <div style="margin-top: 60px;">
+    <div class="mockup-label">Full Page Block (high-risk phishing)</div>
+    <div class="block-page">
+      <div class="block-icon">🛡️</div>
+      <div class="block-title">PayGuard Blocked This Page</div>
+      <div class="block-desc">
+        This website has been identified as a phishing attempt.<br>
+        It's designed to steal your PayPal credentials.
+      </div>
+      <div class="block-details">
+        <div class="block-detail-row">
+          <span class="block-detail-label">Domain</span>
+          <span class="block-detail-value">paypa1-secure-login.com</span>
+        </div>
+        <div class="block-detail-row">
+          <span class="block-detail-label">Threat</span>
+          <span class="block-detail-value">Credential Phishing</span>
+        </div>
+        <div class="block-detail-row">
+          <span class="block-detail-label">Confidence</span>
+          <span class="block-detail-value">98.7%</span>
+        </div>
+      </div>
+      <div class="block-actions">
+        <button class="btn-primary">← Go Back</button>
+        <button class="btn-ghost">View Details</button>
+        <button class="btn-ghost">Proceed Anyway</button>
+      </div>
+    </div>
+  </div>
+  
+  <div style="margin-top: 60px;">
+    <div class="mockup-label">Toolbar Icon States</div>
+    <div class="toolbar-icons">
+      <div class="toolbar-item">
+        <div class="toolbar-icon">
+          🛡️
+          <div class="toolbar-dot dot-green"></div>
+        </div>
+        <div class="toolbar-label">Protected</div>
+      </div>
+      <div class="toolbar-item">
+        <div class="toolbar-icon">
+          🛡️
+          <div class="toolbar-dot dot-yellow"></div>
+        </div>
+        <div class="toolbar-label">Warning</div>
+      </div>
+      <div class="toolbar-item">
+        <div class="toolbar-icon">
+          🛡️
+          <div class="toolbar-dot dot-red"></div>
+        </div>
+        <div class="toolbar-label">Blocked</div>
+      </div>
+      <div class="toolbar-item">
+        <div class="toolbar-icon" style="opacity: 0.5;">
+          🛡️
+        </div>
+        <div class="toolbar-label">Disabled</div>
+      </div>
+    </div>
+  </div>
+
+</body>
+</html>

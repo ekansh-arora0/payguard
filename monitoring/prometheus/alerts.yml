@@ -1,0 +1,58 @@
+groups:
+  - name: payguard_alerts
+    rules:
+      # Backend down for > 1 minute
+      - alert: BackendDown
+        expr: up{job="payguard-backend"} == 0
+        for: 1m
+        labels:
+          severity: critical
+        annotations:
+          summary: "PayGuard backend is down"
+          description: "Backend has been unreachable for more than 1 minute."
+
+      # Enterprise down for > 2 minutes
+      - alert: EnterpriseDown
+        expr: up{job="payguard-enterprise"} == 0
+        for: 2m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Enterprise dashboard is down"
+
+      # High request latency (p95 > 5s)
+      - alert: HighLatency
+        expr: payguard_request_duration_seconds{quantile="0.95"} > 5
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "High API latency detected"
+          description: "95th percentile latency is above 5 seconds."
+
+      # High error rate (> 5% of requests are 5xx)
+      - alert: HighErrorRate
+        expr: rate(payguard_requests_total{status=~"5.."}[5m]) / rate(payguard_requests_total[5m]) > 0.05
+        for: 5m
+        labels:
+          severity: critical
+        annotations:
+          summary: "High error rate (>5% 5xx responses)"
+
+      # High risk detections spike (> 50 high-risk in 10 min)
+      - alert: HighRiskSpike
+        expr: rate(payguard_risk_checks_total{risk_level="high"}[10m]) * 600 > 50
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Unusual spike in high-risk URL detections"
+
+      # Memory usage > 80% of limit
+      - alert: HighMemoryUsage
+        expr: process_resident_memory_bytes / 1073741824 > 3.2
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Backend memory usage above 80% of 4GB limit"

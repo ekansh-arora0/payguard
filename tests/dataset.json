@@ -1,0 +1,34 @@
+{
+  "ai_image_urls": [
+    "https://gizmodo.com/app/uploads/2025/11/elon-musk-cybertruck-fake-square-1280x853.jpg",
+    "https://gizmodo.com/app/uploads/2025/11/elon-musk-fake-truck-square.jpg",
+    "https://gizmodo.com/app/uploads/2025/11/elon-musk-cybertruck-fake-landscape.jpg",
+    "https://gizmodo.com/app/uploads/2024/03/trump-arrest-ai-image.jpg",
+    "https://gizmodo.com/app/uploads/2023/03/pope-in-white-puffer-ai.jpg",
+    "https://gizmodo.com/app/uploads/2023/05/fake-explosion-pentagon-ai.jpg",
+    "https://gizmodo.com/app/uploads/2023/03/ai-fake-elon-musk-crying.jpg",
+    "https://gizmodo.com/app/uploads/2024/01/ai-fashion-model-woman.jpg",
+    "https://gizmodo.com/app/uploads/2023/08/ai-generated-wildlife-lion.jpg",
+    "https://gizmodo.com/app/uploads/2023/09/ai-generated-landscape-cyberpunk.jpg"
+  ],
+  "non_ai_image_urls": [
+    "https://upload.wikimedia.org/wikipedia/commons/3/3f/Fronalpstock_big.jpg",
+    "https://upload.wikimedia.org/wikipedia/commons/a/a9/Example.jpg",
+    "https://upload.wikimedia.org/wikipedia/commons/9/95/Test_image.jpg",
+    "https://www.google.com/images/branding/googlelogo/2x/googlelogo_color_272x92dp.png",
+    "https://upload.wikimedia.org/wikipedia/commons/6/63/Wikipedia-logo.png"
+  ],
+  "scam_texts": [
+    "CRITICAL ALERT: Your computer is infected! Do not close this window. Call Microsoft support at (888) 555-1234 immediately to resolve.",
+    "Your PayPal account will be deleted within 24 hours unless you verify your identity. Click here to update your payment info.",
+    "URGENT: Subscription fee due. Pay a fee with Bitcoin to avoid service suspension. Contact support now.",
+    "Security warning: Device is infected with malware. Call Apple support toll free to remove threats.",
+    "Verify account to prevent data breach. Enter credit card details to confirm your identity."
+  ],
+  "non_scam_texts": [
+    "Team meeting moved to 3pm. Please share the agenda beforehand.",
+    "Reminder: Update README after merging PR #42.",
+    "Can someone review the dashboard deployment logs?",
+    "Sprint planning starts at 10am in the main conference room."
+  ]
+}

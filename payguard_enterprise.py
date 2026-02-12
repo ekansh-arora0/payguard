@@ -20,7 +20,7 @@ import secrets
 # Web framework
 try:
     from fastapi import FastAPI, HTTPException, Depends, BackgroundTasks, Request
-    from fastapi.responses import HTMLResponse, JSONResponse
+    from fastapi.responses import HTMLResponse, JSONResponse, Response
     from fastapi.staticfiles import StaticFiles
     from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
     from pydantic import BaseModel, EmailStr
@@ -745,6 +745,35 @@ if FASTAPI_AVAILABLE:
         """Register webhook for push notifications"""
         push_service.register_webhook(data.user_id, data.webhook_url)
         return {'status': 'registered'}
+    
+    @app.get("/api/metrics", include_in_schema=False)
+    async def metrics():
+        """Prometheus-format metrics"""
+        import sqlite3
+        conn = sqlite3.connect(db.db_path)
+        cursor = conn.cursor()
+        
+        # Count total alerts
+        cursor.execute("SELECT COUNT(*) FROM alerts")
+        total_alerts = cursor.fetchone()[0]
+        
+        # Count by severity
+        cursor.execute("SELECT severity, COUNT(*) FROM alerts GROUP BY severity")
+        by_severity = dict(cursor.fetchall())
+        
+        conn.close()
+        
+        lines = [
+            "# HELP payguard_enterprise_alerts_total Total alerts",
+            "# TYPE payguard_enterprise_alerts_total counter",
+            f"payguard_enterprise_alerts_total {total_alerts}",
+            "# HELP payguard_enterprise_alerts_by_severity Alerts by severity",
+            "# TYPE payguard_enterprise_alerts_by_severity gauge",
+        ]
+        for sev, count in by_severity.items():
+            lines.append(f'payguard_enterprise_alerts_by_severity{{severity="{sev}"}} {count}')
+        
+        return Response("\n".join(lines), media_type="text/plain")
     
     @app.get("/api/health")
     async def health():

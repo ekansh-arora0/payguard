@@ -138,6 +138,117 @@ services:
         limits:
           memory: 512m
 
+  # --- Prometheus (metrics collection) ---
+  prometheus:
+    image: prom/prometheus:v2.48.0
+    volumes:
+      - ./monitoring/prometheus/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - ./monitoring/prometheus/alerts.yml:/etc/prometheus/alerts.yml:ro
+      - prometheus_data:/prometheus
+    command:
+      - '--config.file=/etc/prometheus/prometheus.yml'
+      - '--storage.tsdb.path=/prometheus'
+      - '--storage.tsdb.retention.time=30d'
+      - '--web.enable-lifecycle'
+    networks:
+      - payguard-network
+    restart: unless-stopped
+    deploy:
+      resources:
+        limits:
+          memory: 512m
+
+  # --- Grafana (visualization) ---
+  grafana:
+    image: grafana/grafana:10.2.3
+    ports:
+      - "${GRAFANA_PORT:-3000}:3000"
+    environment:
+      - GF_SECURITY_ADMIN_PASSWORD=${GRAFANA_ADMIN_PASSWORD:-admin}
+      - GF_USERS_ALLOW_SIGN_UP=false
+      - GF_SERVER_ROOT_URL=${GRAFANA_ROOT_URL:-http://localhost:3000}
+    volumes:
+      - grafana_data:/var/lib/grafana
+      - ./monitoring/grafana/provisioning:/etc/grafana/provisioning:ro
+      - ./monitoring/grafana/dashboards:/var/lib/grafana/dashboards:ro
+    networks:
+      - payguard-network
+    depends_on:
+      - prometheus
+    restart: unless-stopped
+    deploy:
+      resources:
+        limits:
+          memory: 256m
+
+  # --- Loki (log aggregation) ---
+  loki:
+    image: grafana/loki:2.9.3
+    volumes:
+      - ./monitoring/loki/loki-config.yml:/etc/loki/local-config.yaml:ro
+      - loki_data:/loki
+    command: -config.file=/etc/loki/local-config.yaml
+    networks:
+      - payguard-network
+    restart: unless-stopped
+    deploy:
+      resources:
+        limits:
+          memory: 256m
+
+  # --- Promtail (log collector) ---
+  promtail:
+    image: grafana/promtail:2.9.3
+    volumes:
+      - /var/lib/docker/containers:/var/lib/docker/containers:ro
+      - /var/log:/var/log:ro
+      - ./monitoring/promtail:/etc/promtail:ro
+    command: -config.file=/etc/promtail/config.yml
+    networks:
+      - payguard-network
+    depends_on:
+      - loki
+    restart: unless-stopped
+    deploy:
+      resources:
+        limits:
+          memory: 128m
+
+  # --- Redis Exporter ---
+  redis-exporter:
+    image: oliver006/redis_exporter:v1.55.0
+    environment:
+      - REDIS_ADDR=redis://redis:6379
+      - REDIS_PASSWORD=${REDIS_PASSWORD}
+    networks:
+      - payguard-network
+    restart: unless-stopped
+    deploy:
+      resources:
+        limits:
+          memory: 64m
+
+  # --- MongoDB Backup (scheduled via cron in container) ---
+  backup:
+    image: mongo:6.0
+    volumes:
+      - ./scripts/backup-mongo.sh:/backup.sh:ro
+      - ./backups:/backups
+      - ./.env:/.env:ro
+    command: >
+      sh -c "apt-get update && apt-get install -y cron &&
+             echo '0 2 * * * /backup.sh >> /var/log/backup.log 2>&1' | crontab - &&
+             cron -f"
+    networks:
+      - payguard-network
+    depends_on:
+      - mongodb
+    restart: unless-stopped
+    deploy:
+      resources:
+        limits:
+          memory: 128m
+
 networks:
   payguard-network:
     driver: bridge
@@ -146,3 +257,6 @@ volumes:
   mongodb_data:
   redis_data:
   enterprise_data:
+  prometheus_data:
+  grafana_data:
+  loki_data:
