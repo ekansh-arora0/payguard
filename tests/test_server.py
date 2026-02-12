@@ -68,9 +68,14 @@ def _fake_risk_init(self, db):
     self.db = db
     self.ml_model = None
     self.ml_scaler = None
-    self.cnn_model = None
-    self.bert_model = None
-    self.bert_tokenizer = None
+    self.html_cnn = None
+    self.html_cnn_seq_len = 4096
+    self.html_model = None
+    self.html_scaler = None
+    self.text_model = None
+    self.text_tokenizer = None
+    self.shap_explainer = None
+    self.email_guardian = None
     self.dire_home = None
     self.dire_model_path = None
     self._dire_busy = False

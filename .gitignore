@@ -96,8 +96,6 @@ models/*
 !models/best_excel_xgb_scaler.pkl
 !models/url_feature_names.json
 !models/best_html_rf_current.pkl
-docs/
-
 *.log
 .DS_Store
 node_modules/
