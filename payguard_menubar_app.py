@@ -215,7 +215,7 @@ class PayGuardApp(rumps.App):
             self.backend_online = False
             return
         try:
-            r = requests.get(f"{BACKEND_URL}/api/health", timeout=3)
+            r = requests.get(f"{BACKEND_URL}/api/v1/health", timeout=3)
             self.backend_online = r.status_code == 200
         except Exception:
             self.backend_online = False
