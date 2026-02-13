@@ -339,9 +339,7 @@ class RiskScoringEngine:
                 trust_score = min(100, trust_score + 10)
             if hsts or hsts_flag:
                 trust_score = min(100, trust_score + 5)
-            # rely on ML score; headers contribute but no fixed trust floor
-            if abs(proba[0] - 0.5) < 0.1:
-                risk_factors.append("Low confidence prediction")
+            # Skip "Low confidence prediction" - not useful for users
             # stabilize known-good baselines even when HTML is missing
             try:
                 reputable_base = (ssl_valid and (domain_age_days or 0) >= 365 and (sec_hdrs >= 2 or hsts or hsts_flag) and not await self._is_blacklisted(domain, url))

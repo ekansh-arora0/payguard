@@ -282,9 +282,9 @@ export default function Home() {
     
     try {
       const controller = new AbortController()
-      const timeoutId = setTimeout(() => controller.abort(), 5000)
+      const timeoutId = setTimeout(() => controller.abort(), 3000)
       
-      const response = await fetch(`${API_BASE}/api/v1/risk`, {
+      const response = await fetch(`${API_BASE}/api/v1/risk?fast=true`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -664,6 +664,31 @@ export default function Home() {
                       </>
                     )}
                   </button>
+                </div>
+
+                {/* Example URLs */}
+                <div className="mb-6">
+                  <div className="text-sm text-zinc-500 mb-3">Try these examples:</div>
+                  <div className="flex flex-wrap gap-2">
+                    {[
+                      { url: 'https://paypal-secure-verify-now.com/login', label: '🔴 Phishing', color: 'red' },
+                      { url: 'https://google.com', label: '🟢 Safe', color: 'emerald' },
+                      { url: 'https://192.168.1.1/login', label: '🟡 Suspicious', color: 'yellow' },
+                      { url: 'http://free-gift-winner-now.xyz', label: '🔴 Scam', color: 'red' },
+                    ].map((example, i) => (
+                      <button
+                        key={i}
+                        onClick={() => setUrlInput(example.url)}
+                        className={`px-3 py-1.5 text-xs rounded-full border transition-all hover:scale-105 ${
+                          example.color === 'red' ? 'border-red-500/30 text-red-400 hover:border-red-500/50' :
+                          example.color === 'yellow' ? 'border-yellow-500/30 text-yellow-400 hover:border-yellow-500/50' :
+                          'border-emerald-500/30 text-emerald-400 hover:border-emerald-500/50'
+                        }`}
+                      >
+                        {example.label}
+                      </button>
+                    ))}
+                  </div>
                 </div>
 
                 {demoResult && (

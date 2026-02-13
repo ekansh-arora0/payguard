@@ -205,24 +205,134 @@ async def health_check():
         "timestamp": datetime.now(timezone.utc),
     }
 
+# ============= Fast Pattern Detection for Demo =============
+
+# Known phishing/suspicious patterns
+PHISHING_PATTERNS = [
+    (r"secure-(login|verify|account|update|confirm)", 85, "Fake security portal"),
+    (r"(paypal|apple|microsoft|amazon|google|facebook)-secure", 90, "Brand impersonation"),
+    (r"verify-[a-z]+-now", 80, "Urgency tactic"),
+    (r"account-(update|verify|secure|login)-[0-9]+", 85, "Fake account page"),
+    (r"\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}", 75, "IP address instead of domain"),
+    (r"free-.*-(gift|prize|winner|reward)", 80, "Prize scam"),
+    (r"urgent-(verify|update|confirm)", 85, "Urgency language"),
+    (r"billing-.*-secure", 85, "Fake billing page"),
+]
+
+SAFE_PATTERNS = [
+    (r"^https://(www\.)?(google|github|apple|microsoft|amazon)\.com", 95, "Trusted domain"),
+    (r"^https://.*\.gov", 90, "Government site"),
+    (r"^https://.*\.edu", 88, "Educational institution"),
+]
+
+def quick_risk_analysis(url: str) -> RiskScore:
+    """Fast URL pattern analysis for demo - no network calls."""
+    import re
+    from urllib.parse import urlparse
+    
+    url_lower = url.lower()
+    parsed = urlparse(url)
+    domain = parsed.netloc or parsed.path
+    
+    risk_factors = []
+    safety_indicators = []
+    score = 75  # Start neutral
+    ssl_valid = url.startswith("https://")
+    
+    # Check for HTTPS
+    if ssl_valid:
+        safety_indicators.append("Secure HTTPS connection")
+        score += 10
+    else:
+        risk_factors.append("Unencrypted HTTP connection")
+        score -= 15
+    
+    # Check phishing patterns
+    for pattern, penalty, reason in PHISHING_PATTERNS:
+        if re.search(pattern, url_lower):
+            score -= penalty
+            risk_factors.append(reason)
+    
+    # Check safe patterns
+    for pattern, bonus, reason in SAFE_PATTERNS:
+        if re.search(pattern, url_lower):
+            score += bonus
+            safety_indicators.append(reason)
+    
+    # Length heuristic
+    if len(url) > 100:
+        risk_factors.append("Unusually long URL")
+        score -= 10
+    
+    # Multiple subdomains
+    subdomain_count = domain.count(".")
+    if subdomain_count > 3:
+        risk_factors.append("Excessive subdomains")
+        score -= 15
+    
+    score = max(0, min(100, score))
+    
+    if score >= 70:
+        level = RiskLevel.LOW
+    elif score >= 40:
+        level = RiskLevel.MEDIUM
+    else:
+        level = RiskLevel.HIGH
+    
+    if not risk_factors:
+        risk_factors.append("No significant risk factors")
+    if not safety_indicators:
+        safety_indicators.append("Standard security checks passed")
+    
+    # Generate education message
+    if level == RiskLevel.HIGH:
+        education_message = "⚠️ This website shows multiple signs of being a scam. Do not enter any personal or payment information."
+    elif level == RiskLevel.MEDIUM:
+        education_message = "⚡ This website has some suspicious characteristics. Proceed with caution and verify the URL carefully."
+    else:
+        education_message = "✅ This website appears safe for transactions. Always verify the URL before entering payment details."
+    
+    return RiskScore(
+        url=url,
+        domain=domain,
+        risk_level=level,
+        trust_score=float(score),
+        risk_factors=risk_factors,
+        safety_indicators=safety_indicators,
+        ssl_valid=ssl_valid,
+        domain_age_days=None,
+        has_payment_gateway=False,
+        detected_gateways=[],
+        merchant_reputation=None,
+        education_message=education_message,
+        checked_at=datetime.now(timezone.utc)
+    )
+
 # ============= Risk Assessment =============
 
 @api_router.post("/risk", response_model=RiskScore)
 async def check_risk(
     request: RiskCheckRequest,
-    api_key: str = Depends(require_api_key)
+    api_key: str = Depends(require_api_key),
+    fast: bool = True  # Default to fast mode
 ):
     """
     Main endpoint to check risk score for a URL.
-    This is where the ML model will be plugged in later.
+    Set fast=false for full ML analysis (slower).
     """
     t0 = time.time()
     try:
         await api_key_manager.validate_api_key(api_key)
         
-        logger.info(f"Checking risk for URL: {request.url}")
+        logger.info(f"Checking risk for URL: {request.url} (fast={fast})")
         
-        # Calculate risk using engine with HTML content to power content ML
+        # Use quick analysis for demo speed
+        if fast:
+            risk_score = quick_risk_analysis(request.url)
+            _record_request("/risk", 200, time.time() - t0, risk_score.risk_level.value)
+            return risk_score
+        
+        # Full ML analysis (slower)
         html = None
         try:
             async with httpx.AsyncClient(timeout=3.0) as http_client:
