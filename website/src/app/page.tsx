@@ -231,8 +231,8 @@ export default function Home() {
   const usersCount = useCountUp(stats.active_users)
   const blockedCount = useCountUp(stats.high_risk_detected)
 
-  const macCommand = 'curl -fsSL https://payguard.io/install.sh | bash'
-  const winCommand = 'irm https://payguard.io/install.ps1 | iex'
+  const macCommand = 'curl -fsSL https://raw.githubusercontent.com/ekansh-arora0/payguard/main/install.sh | bash'
+  const winCommand = 'irm https://raw.githubusercontent.com/ekansh-arora0/payguard/main/install.ps1 | iex'
 
   useEffect(() => {
     const fetchStats = async () => {

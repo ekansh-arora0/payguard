@@ -1,5 +1,5 @@
 # PayGuard Windows Installer
-# Usage: irm https://payguard.com/install.ps1 | iex
+# Usage: irm https://raw.githubusercontent.com/ekansh-arora0/payguard/main/install.ps1 | iex
 
 $ErrorActionPreference = "Stop"
 
@@ -10,7 +10,7 @@ $arch = if ([Environment]::Is64BitOperatingSystem) { "amd64" } else { "386" }
 Write-Host "📱 Detected: Windows ($arch)" -ForegroundColor Blue
 
 $version = "${env:VERSION:-1.0.0}"
-$repo = "payguard/payguard"
+$repo = "ekansh-arora0/payguard"
 $installDir = "$env:LOCALAPPDATA\PayGuard"
 $downloadUrl = "https://github.com/$repo/releases/download/v$version/PayGuard-v$version-windows.zip"
 

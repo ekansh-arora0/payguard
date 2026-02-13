@@ -1,6 +1,6 @@
 #!/bin/bash
 # PayGuard macOS/Linux Installer
-# Usage: curl -fsSL https://payguard.com/install.sh | bash
+# Usage: curl -fsSL https://raw.githubusercontent.com/ekansh-arora0/payguard/main/install.sh | bash
 
 set -e
 
@@ -27,7 +27,7 @@ else
 fi
 
 VERSION="${VERSION:-1.0.0}"
-GITHUB_REPO="payguard/payguard"
+GITHUB_REPO="ekansh-arora0/payguard"
 
 echo "📥 Downloading PayGuard v${VERSION}..."
 
