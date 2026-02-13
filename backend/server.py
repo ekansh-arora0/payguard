@@ -1074,7 +1074,8 @@ from starlette.responses import RedirectResponse
 @app.api_route("/api/{path:path}", methods=["GET", "POST", "PUT", "DELETE", "PATCH"], include_in_schema=False)
 async def legacy_api_redirect(path: str, request: Request):
     """Redirect unversioned /api/* requests to /api/v1/*."""
+    # Don't redirect if path already starts with v1/ (let those routes handle it)
     if path.startswith("v1/"):
-        return RedirectResponse(url="/api/v1/health", status_code=307)
+        raise HTTPException(status_code=404, detail="Not Found")
     url = request.url.replace(path=f"/api/v1/{path}")
     return RedirectResponse(url=str(url), status_code=307)
