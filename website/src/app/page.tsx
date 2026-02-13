@@ -82,9 +82,14 @@ export default function Home() {
   useEffect(() => {
     const fetchStats = async () => {
       try {
+        const controller = new AbortController()
+        const timeoutId = setTimeout(() => controller.abort(), 3000)
+        
         const response = await fetch(`${API_BASE}/api/v1/stats/public`, { 
-          signal: AbortSignal.timeout(3000) 
+          signal: controller.signal 
         })
+        clearTimeout(timeoutId)
+        
         if (response.ok) {
           const data = await response.json()
           setStats(data)
@@ -121,6 +126,9 @@ export default function Home() {
     const startTime = Date.now()
     
     try {
+      const controller = new AbortController()
+      const timeoutId = setTimeout(() => controller.abort(), 5000)
+      
       const response = await fetch(`${API_BASE}/api/v1/risk`, {
         method: 'POST',
         headers: {
@@ -128,8 +136,9 @@ export default function Home() {
           'X-API-Key': 'demo_key'
         },
         body: JSON.stringify({ url: urlInput }),
-        signal: AbortSignal.timeout(5000)
+        signal: controller.signal
       })
+      clearTimeout(timeoutId)
       
       if (!response.ok) throw new Error('Failed to analyze')
       
@@ -144,9 +153,13 @@ export default function Home() {
       })
       
       // Refresh stats
+      const statsController = new AbortController()
+      const statsTimeoutId = setTimeout(() => statsController.abort(), 3000)
       const statsResponse = await fetch(`${API_BASE}/api/v1/stats/public`, {
-        signal: AbortSignal.timeout(3000)
+        signal: statsController.signal
       })
+      clearTimeout(statsTimeoutId)
+      
       if (statsResponse.ok) {
         setStats(await statsResponse.json())
       }
