@@ -1,10 +1,11 @@
 'use client'
 
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import { 
   Shield, Check, Zap, Globe, Lock, Eye, ChevronLeft,
   Download, Terminal, AlertTriangle, CheckCircle, ArrowRight,
-  Menu, X, ExternalLink, Copy, Sparkles, Activity, Server
+  Menu, X, ExternalLink, Copy, Sparkles, Activity, Server,
+  ChevronDown, Play, Star, Users, TrendingUp
 } from 'lucide-react'
 import Link from 'next/link'
 
@@ -52,13 +53,163 @@ const getDemoAnalysis = (url: string) => {
   }
 }
 
+// Aurora Background Component
+const AuroraBackground = () => {
+  return (
+    <div className="fixed inset-0 overflow-hidden pointer-events-none">
+      {/* Aurora gradients */}
+      <div className="absolute top-0 left-1/4 w-[800px] h-[600px] bg-emerald-500/20 rounded-full blur-[150px] animate-aurora-1" />
+      <div className="absolute bottom-0 right-1/4 w-[600px] h-[500px] bg-blue-500/20 rounded-full blur-[150px] animate-aurora-2" />
+      <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[1000px] h-[800px] bg-purple-500/10 rounded-full blur-[200px] animate-aurora-3" />
+      
+      {/* Grid overlay */}
+      <div className="absolute inset-0 bg-[linear-gradient(rgba(255,255,255,0.03)_1px,transparent_1px),linear-gradient(90deg,rgba(255,255,255,0.03)_1px,transparent_1px)] bg-[size:60px_60px] [mask-image:radial-gradient(ellipse_80%_50%_at_50%_50%,#000_70%,transparent_100%)]" />
+    </div>
+  )
+}
+
+// Floating Particles Component
+const FloatingParticles = () => {
+  return (
+    <div className="fixed inset-0 overflow-hidden pointer-events-none">
+      {[...Array(20)].map((_, i) => (
+        <div
+          key={i}
+          className="absolute w-1 h-1 bg-emerald-400/30 rounded-full animate-float"
+          style={{
+            left: `${Math.random() * 100}%`,
+            top: `${Math.random() * 100}%`,
+            animationDelay: `${Math.random() * 5}s`,
+            animationDuration: `${10 + Math.random() * 10}s`
+          }}
+        />
+      ))}
+    </div>
+  )
+}
+
+// Animated Counter Hook
+const useCountUp = (end: number, duration: number = 2000) => {
+  const [count, setCount] = useState(0)
+  const [isVisible, setIsVisible] = useState(false)
+  const ref = useRef<HTMLDivElement>(null)
+
+  useEffect(() => {
+    const observer = new IntersectionObserver(
+      ([entry]) => {
+        if (entry.isIntersecting) {
+          setIsVisible(true)
+        }
+      },
+      { threshold: 0.1 }
+    )
+
+    if (ref.current) {
+      observer.observe(ref.current)
+    }
+
+    return () => observer.disconnect()
+  }, [])
+
+  useEffect(() => {
+    if (!isVisible) return
+
+    let startTime: number
+    let animationFrame: number
+
+    const animate = (currentTime: number) => {
+      if (!startTime) startTime = currentTime
+      const progress = Math.min((currentTime - startTime) / duration, 1)
+      
+      // Easing function
+      const easeOutQuart = 1 - Math.pow(1 - progress, 4)
+      setCount(Math.floor(easeOutQuart * end))
+
+      if (progress < 1) {
+        animationFrame = requestAnimationFrame(animate)
+      }
+    }
+
+    animationFrame = requestAnimationFrame(animate)
+    return () => cancelAnimationFrame(animationFrame)
+  }, [isVisible, end, duration])
+
+  return { count, ref }
+}
+
+// Animated Gradient Text
+const GradientText = ({ children, className = '' }: { children: React.ReactNode; className?: string }) => {
+  return (
+    <span className={`bg-gradient-to-r from-emerald-400 via-teal-400 to-cyan-400 bg-[length:200%_100%] animate-gradient-x bg-clip-text text-transparent ${className}`}>
+      {children}
+    </span>
+  )
+}
+
+// Glow Card Component
+const GlowCard = ({ children, className = '', gradient = 'from-emerald-500/20 via-teal-500/20 to-cyan-500/20' }: { 
+  children: React.ReactNode; 
+  className?: string;
+  gradient?: string;
+}) => {
+  return (
+    <div className={`group relative ${className}`}>
+      <div className={`absolute -inset-0.5 bg-gradient-to-r ${gradient} rounded-2xl opacity-0 group-hover:opacity-100 blur transition duration-500 group-hover:duration-200`} />
+      <div className="relative bg-zinc-900/80 backdrop-blur-xl rounded-2xl border border-white/5 h-full">
+        {children}
+      </div>
+    </div>
+  )
+}
+
+// Scroll Reveal Component
+const ScrollReveal = ({ children, className = '', delay = 0 }: { 
+  children: React.ReactNode; 
+  className?: string;
+  delay?: number;
+}) => {
+  const [isVisible, setIsVisible] = useState(false)
+  const ref = useRef<HTMLDivElement>(null)
+
+  useEffect(() => {
+    const observer = new IntersectionObserver(
+      ([entry]) => {
+        if (entry.isIntersecting) {
+          setIsVisible(true)
+        }
+      },
+      { threshold: 0.1 }
+    )
+
+    if (ref.current) {
+      observer.observe(ref.current)
+    }
+
+    return () => observer.disconnect()
+  }, [])
+
+  return (
+    <div
+      ref={ref}
+      className={`transition-all duration-700 ${className} ${
+        isVisible 
+          ? 'opacity-100 translate-y-0' 
+          : 'opacity-0 translate-y-10'
+      }`}
+      style={{ transitionDelay: `${delay}ms` }}
+    >
+      {children}
+    </div>
+  )
+}
+
 export default function Home() {
   const [stats, setStats] = useState({
     threats_analyzed: 1247,
     active_users: 89,
-    high_risk_detected: 0,
-    medium_risk_detected: 0,
-    low_risk_detected: 0
+    high_risk_detected: 128,
+    medium_risk_detected: 45,
+    low_risk_detected: 1074
   })
   const [isMenuOpen, setIsMenuOpen] = useState(false)
   const [copiedMac, setCopiedMac] = useState(false)
@@ -75,6 +226,10 @@ export default function Home() {
   const [isLoading, setIsLoading] = useState(false)
   const [error, setError] = useState('')
   const [serverAvailable, setServerAvailable] = useState(true)
+
+  const threatsCount = useCountUp(stats.threats_analyzed)
+  const usersCount = useCountUp(stats.active_users)
+  const blockedCount = useCountUp(stats.high_risk_detected)
 
   const macCommand = 'curl -fsSL https://payguard.io/install.sh | bash'
   const winCommand = 'irm https://payguard.io/install.ps1 | iex'
@@ -152,7 +307,6 @@ export default function Home() {
         response_time: Date.now() - startTime
       })
       
-      // Refresh stats
       const statsController = new AbortController()
       const statsTimeoutId = setTimeout(() => statsController.abort(), 3000)
       const statsResponse = await fetch(`${API_BASE}/api/v1/stats/public`, {
@@ -164,7 +318,6 @@ export default function Home() {
         setStats(await statsResponse.json())
       }
     } catch (err) {
-      // Use demo mode as fallback
       const demoData = getDemoAnalysis(urlInput)
       setDemoResult({
         url: urlInput,
@@ -181,21 +334,48 @@ export default function Home() {
   }
 
   return (
-    <main className="min-h-screen bg-[#0a0a0a] text-white overflow-x-hidden">
-      {/* Animated Gradient Background */}
-      <div className="fixed inset-0 overflow-hidden pointer-events-none">
-        <div className="absolute -top-1/2 -left-1/2 w-full h-full bg-gradient-to-br from-emerald-500/10 via-transparent to-blue-500/10 blur-3xl animate-pulse" />
-        <div className="absolute -bottom-1/2 -right-1/2 w-full h-full bg-gradient-to-tl from-purple-500/10 via-transparent to-emerald-500/10 blur-3xl animate-pulse delay-1000" />
-      </div>
+    <main className="min-h-screen bg-[#030303] text-white overflow-x-hidden selection:bg-emerald-500/30">
+      <AuroraBackground />
+      <FloatingParticles />
       
-      {/* Grid Pattern Overlay */}
-      <div className="fixed inset-0 bg-[linear-gradient(rgba(255,255,255,0.02)_1px,transparent_1px),linear-gradient(90deg,rgba(255,255,255,0.02)_1px,transparent_1px)] bg-[size:100px_100px] pointer-events-none" />
-      
+      {/* Global Styles for Animations */}
+      <style jsx global>{`
+        @keyframes aurora-1 {
+          0%, 100% { transform: translate(0, 0) scale(1); }
+          33% { transform: translate(50px, -50px) scale(1.1); }
+          66% { transform: translate(-30px, 30px) scale(0.95); }
+        }
+        @keyframes aurora-2 {
+          0%, 100% { transform: translate(0, 0) scale(1); }
+          33% { transform: translate(-40px, 40px) scale(1.05); }
+          66% { transform: translate(60px, -30px) scale(0.9); }
+        }
+        @keyframes aurora-3 {
+          0%, 100% { transform: translate(-50%, -50%) scale(1); }
+          50% { transform: translate(-50%, -50%) scale(1.15); }
+        }
+        @keyframes float {
+          0%, 100% { transform: translateY(0) translateX(0); opacity: 0.3; }
+          25% { transform: translateY(-20px) translateX(10px); opacity: 0.6; }
+          50% { transform: translateY(-10px) translateX(-10px); opacity: 0.4; }
+          75% { transform: translateY(-30px) translateX(5px); opacity: 0.5; }
+        }
+        @keyframes gradient-x {
+          0%, 100% { background-position: 0% 50%; }
+          50% { background-position: 100% 50%; }
+        }
+        .animate-aurora-1 { animation: aurora-1 20s ease-in-out infinite; }
+        .animate-aurora-2 { animation: aurora-2 25s ease-in-out infinite; }
+        .animate-aurora-3 { animation: aurora-3 30s ease-in-out infinite; }
+        .animate-float { animation: float 15s ease-in-out infinite; }
+        .animate-gradient-x { animation: gradient-x 3s ease infinite; }
+      `}</style>
+
       {/* Navigation */}
-      <nav className="fixed top-0 w-full z-50 bg-[#0a0a0a]/80 backdrop-blur-xl border-b border-white/5">
+      <nav className="fixed top-0 w-full z-50 bg-[#030303]/80 backdrop-blur-xl border-b border-white/5">
         <div className="max-w-7xl mx-auto px-6 h-16 flex items-center justify-between">
           <Link href="/" className="flex items-center gap-2 group">
-            <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-emerald-500 to-emerald-600 flex items-center justify-center">
+            <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-emerald-500 to-teal-600 flex items-center justify-center shadow-lg shadow-emerald-500/20 group-hover:shadow-emerald-500/40 transition-shadow">
               <Shield className="w-5 h-5 text-white" />
             </div>
             <span className="font-bold text-lg group-hover:text-emerald-400 transition-colors">PayGuard</span>
@@ -223,7 +403,7 @@ export default function Home() {
         </div>
 
         {isMenuOpen && (
-          <div className="md:hidden border-t border-white/5 bg-[#0a0a0a]/95 backdrop-blur-xl px-6 py-4 space-y-4">
+          <div className="md:hidden border-t border-white/5 bg-[#030303]/95 backdrop-blur-xl px-6 py-4 space-y-4">
             <Link href="#features" className="block text-zinc-400 hover:text-white">Features</Link>
             <Link href="#demo" className="block text-zinc-400 hover:text-white">Demo</Link>
             <Link href="#install" className="block text-zinc-400 hover:text-white">Install</Link>
@@ -236,63 +416,68 @@ export default function Home() {
       {/* Hero Section */}
       <section className="relative pt-32 pb-20 px-6">
         <div className="max-w-5xl mx-auto text-center">
-          {/* Badge */}
-          <div className="inline-flex items-center gap-2 px-4 py-2 rounded-full border border-emerald-500/20 bg-emerald-500/5 mb-8 hover:border-emerald-500/40 transition-colors cursor-pointer">
-            <Sparkles className="w-4 h-4 text-emerald-400" />
-            <span className="text-sm text-emerald-400">
-              {stats.threats_analyzed?.toLocaleString() || '1,247'} URLs analyzed and counting
-            </span>
-          </div>
+          <ScrollReveal>
+            <div className="inline-flex items-center gap-2 px-4 py-2 rounded-full border border-emerald-500/30 bg-emerald-500/10 mb-8 hover:border-emerald-500/50 transition-colors cursor-pointer group">
+              <Sparkles className="w-4 h-4 text-emerald-400 group-hover:rotate-12 transition-transform" />
+              <span className="text-sm text-emerald-400">
+                {stats.threats_analyzed?.toLocaleString() || '1,247'} URLs analyzed
+              </span>
+            </div>
+          </ScrollReveal>
           
-          {/* Main Headline */}
-          <h1 className="text-5xl md:text-7xl font-bold tracking-tight mb-6 leading-[1.1]">
-            <span className="bg-gradient-to-b from-white to-zinc-400 bg-clip-text text-transparent">
-              Stop phishing attacks
-            </span>
-            <br />
-            <span className="bg-gradient-to-r from-emerald-400 to-emerald-600 bg-clip-text text-transparent">
-              before they happen
-            </span>
-          </h1>
+          <ScrollReveal delay={100}>
+            <h1 className="text-5xl md:text-7xl font-bold tracking-tight mb-6 leading-[1.1]">
+              <span className="text-white">
+                Stop phishing attacks
+              </span>
+              <br />
+              <GradientText>before they happen</GradientText>
+            </h1>
+          </ScrollReveal>
           
-          <p className="text-xl text-zinc-400 mb-10 leading-relaxed max-w-2xl mx-auto">
-            Four machine learning models analyze every link in real-time. 
-            Install with one command and browse with confidence.
-          </p>
+          <ScrollReveal delay={200}>
+            <p className="text-xl text-zinc-400 mb-10 leading-relaxed max-w-2xl mx-auto">
+              Four machine learning models analyze every link in real-time. 
+              Install with one command and browse with confidence.
+            </p>
+          </ScrollReveal>
 
-          {/* CTA Buttons */}
-          <div className="flex flex-col sm:flex-row gap-4 justify-center">
-            <a 
-              href="#install" 
-              className="group inline-flex items-center justify-center gap-2 px-8 py-4 bg-gradient-to-r from-emerald-500 to-emerald-600 hover:from-emerald-400 hover:to-emerald-500 text-white font-semibold rounded-xl transition-all text-lg shadow-lg shadow-emerald-500/25 hover:shadow-emerald-500/40"
-            >
-              <Terminal className="w-5 h-5" />
-              Install Now
-              <ArrowRight className="w-5 h-5 group-hover:translate-x-1 transition-transform" />
-            </a>
-            <a 
-              href="#demo" 
-              className="inline-flex items-center justify-center gap-2 px-8 py-4 border border-zinc-700 hover:border-zinc-500 rounded-xl transition-all text-lg hover:bg-zinc-800/50"
-            >
-              <Activity className="w-5 h-5" />
-              Try Demo
-            </a>
-          </div>
+          <ScrollReveal delay={300}>
+            <div className="flex flex-col sm:flex-row gap-4 justify-center">
+              <a 
+                href="#install" 
+                className="group relative inline-flex items-center justify-center gap-2 px-8 py-4 bg-emerald-500 hover:bg-emerald-400 text-black font-semibold rounded-xl transition-all text-lg overflow-hidden"
+              >
+                <div className="absolute inset-0 bg-gradient-to-r from-transparent via-white/20 to-transparent -translate-x-full group-hover:translate-x-full transition-transform duration-700" />
+                <Terminal className="w-5 h-5" />
+                Install Now
+                <ArrowRight className="w-5 h-5 group-hover:translate-x-1 transition-transform" />
+              </a>
+              <a 
+                href="#demo" 
+                className="inline-flex items-center justify-center gap-2 px-8 py-4 border border-zinc-700 hover:border-zinc-500 rounded-xl transition-all text-lg hover:bg-zinc-800/50 group"
+              >
+                <Play className="w-5 h-5 group-hover:scale-110 transition-transform" />
+                Try Demo
+              </a>
+            </div>
+          </ScrollReveal>
 
-          {/* Stats Row */}
-          <div className="mt-16 grid grid-cols-2 md:grid-cols-4 gap-8 max-w-3xl mx-auto">
+          {/* Stats */}
+          <div className="mt-20 grid grid-cols-3 gap-8 max-w-3xl mx-auto">
             {[
-              { label: 'Beta Users', value: stats.active_users?.toLocaleString() || '89' },
-              { label: 'URLs Analyzed', value: stats.threats_analyzed?.toLocaleString() || '1,247' },
-              { label: 'Threats Blocked', value: stats.high_risk_detected?.toLocaleString() || '128+' },
-              { label: 'Avg Response', value: '<50ms' },
+              { label: 'URLs Protected', value: threatsCount.count, ref: threatsCount.ref, suffix: '+' },
+              { label: 'Beta Users', value: usersCount.count, ref: usersCount.ref, suffix: '' },
+              { label: 'Threats Blocked', value: blockedCount.count, ref: blockedCount.ref, suffix: '' },
             ].map((stat, i) => (
-              <div key={i} className="text-center">
-                <div className="text-3xl md:text-4xl font-bold bg-gradient-to-b from-white to-zinc-400 bg-clip-text text-transparent">
-                  {stat.value}
+              <ScrollReveal key={i} delay={400 + i * 100}>
+                <div ref={stat.ref} className="text-center group">
+                  <div className="text-4xl md:text-5xl font-bold text-white mb-2 group-hover:scale-105 transition-transform">
+                    {stat.value.toLocaleString()}{stat.suffix}
+                  </div>
+                  <div className="text-sm text-zinc-500">{stat.label}</div>
                 </div>
-                <div className="text-sm text-zinc-500 mt-1">{stat.label}</div>
-              </div>
+              </ScrollReveal>
             ))}
           </div>
         </div>
@@ -301,81 +486,84 @@ export default function Home() {
       {/* Install Section */}
       <section id="install" className="relative py-24 px-6">
         <div className="max-w-4xl mx-auto">
-          <div className="text-center mb-12">
-            <h2 className="text-4xl md:text-5xl font-bold mb-4 bg-gradient-to-b from-white to-zinc-400 bg-clip-text text-transparent">
-              Install in seconds
-            </h2>
-            <p className="text-zinc-400 text-lg">
-              One command. No account required. Works on macOS, Linux, and Windows.
-            </p>
-          </div>
+          <ScrollReveal>
+            <div className="text-center mb-12">
+              <h2 className="text-4xl md:text-5xl font-bold mb-4">
+                <GradientText>Install in seconds</GradientText>
+              </h2>
+              <p className="text-zinc-400 text-lg">
+                One command. No account required. Works everywhere.
+              </p>
+            </div>
+          </ScrollReveal>
 
-          {/* macOS/Linux Card */}
-          <div className="mb-6 bg-zinc-900/50 backdrop-blur-sm rounded-2xl border border-white/5 p-6 hover:border-emerald-500/20 transition-colors">
-            <div className="flex items-center gap-4 mb-4">
-              <div className="w-12 h-12 rounded-xl bg-gradient-to-br from-zinc-800 to-zinc-900 flex items-center justify-center text-2xl border border-white/5">
-                🍎
+          {/* macOS/Linux */}
+          <ScrollReveal delay={100}>
+            <GlowCard className="mb-6">
+              <div className="p-6">
+                <div className="flex items-center gap-4 mb-4">
+                  <div className="w-12 h-12 rounded-xl bg-zinc-800 flex items-center justify-center text-2xl border border-white/10 group-hover:scale-110 transition-transform">
+                    🍎
+                  </div>
+                  <div>
+                    <h3 className="font-semibold text-lg">macOS & Linux</h3>
+                    <p className="text-sm text-zinc-500">Copy into Terminal</p>
+                  </div>
+                </div>
+                <div className="relative bg-black/50 rounded-xl border border-white/10 p-4 font-mono text-sm group/code">
+                  <code className="text-emerald-400">{macCommand}</code>
+                  <button 
+                    onClick={() => copyCommand('mac')}
+                    className="absolute right-4 top-1/2 -translate-y-1/2 p-2 text-zinc-500 hover:text-white transition-colors"
+                  >
+                    {copiedMac ? <Check className="w-4 h-4 text-emerald-500" /> : <Copy className="w-4 h-4" />}
+                  </button>
+                </div>
               </div>
-              <div>
-                <h3 className="font-semibold text-lg">macOS & Linux</h3>
-                <p className="text-sm text-zinc-500">Copy and paste into Terminal</p>
-              </div>
-            </div>
-            <div className="relative bg-black/50 rounded-xl border border-white/10 p-4 font-mono text-sm group">
-              <code className="text-emerald-400">{macCommand}</code>
-              <button 
-                onClick={() => copyCommand('mac')}
-                className="absolute right-4 top-1/2 -translate-y-1/2 p-2 text-zinc-500 hover:text-white transition-colors opacity-0 group-hover:opacity-100"
-              >
-                {copiedMac ? <Check className="w-4 h-4 text-emerald-500" /> : <Copy className="w-4 h-4" />}
-              </button>
-            </div>
-          </div>
+            </GlowCard>
+          </ScrollReveal>
 
-          {/* Windows Card */}
-          <div className="mb-8 bg-zinc-900/50 backdrop-blur-sm rounded-2xl border border-white/5 p-6 hover:border-blue-500/20 transition-colors">
-            <div className="flex items-center gap-4 mb-4">
-              <div className="w-12 h-12 rounded-xl bg-gradient-to-br from-zinc-800 to-zinc-900 flex items-center justify-center text-2xl border border-white/5">
-                🪟
+          {/* Windows */}
+          <ScrollReveal delay={200}>
+            <GlowCard gradient="from-blue-500/20 via-cyan-500/20 to-blue-500/20">
+              <div className="p-6">
+                <div className="flex items-center gap-4 mb-4">
+                  <div className="w-12 h-12 rounded-xl bg-zinc-800 flex items-center justify-center text-2xl border border-white/10">
+                    🪟
+                  </div>
+                  <div>
+                    <h3 className="font-semibold text-lg">Windows</h3>
+                    <p className="text-sm text-zinc-500">Copy into PowerShell</p>
+                  </div>
+                </div>
+                <div className="relative bg-black/50 rounded-xl border border-white/10 p-4 font-mono text-sm">
+                  <code className="text-blue-400">{winCommand}</code>
+                  <button 
+                    onClick={() => copyCommand('win')}
+                    className="absolute right-4 top-1/2 -translate-y-1/2 p-2 text-zinc-500 hover:text-white transition-colors"
+                  >
+                    {copiedWin ? <Check className="w-4 h-4 text-emerald-500" /> : <Copy className="w-4 h-4" />}
+                  </button>
+                </div>
               </div>
-              <div>
-                <h3 className="font-semibold text-lg">Windows</h3>
-                <p className="text-sm text-zinc-500">Copy and paste into PowerShell</p>
-              </div>
-            </div>
-            <div className="relative bg-black/50 rounded-xl border border-white/10 p-4 font-mono text-sm group">
-              <code className="text-blue-400">{winCommand}</code>
-              <button 
-                onClick={() => copyCommand('win')}
-                className="absolute right-4 top-1/2 -translate-y-1/2 p-2 text-zinc-500 hover:text-white transition-colors opacity-0 group-hover:opacity-100"
-              >
-                {copiedWin ? <Check className="w-4 h-4 text-emerald-500" /> : <Copy className="w-4 h-4" />}
-              </button>
-            </div>
-          </div>
-
-          <div className="text-center">
-            <p className="text-sm text-zinc-500">
-              💡 <strong>New to the command line?</strong>{' '}
-              <Link href="/install-guide" className="text-emerald-500 hover:text-emerald-400 underline underline-offset-2">
-                View step-by-step guide
-              </Link>
-            </p>
-          </div>
+            </GlowCard>
+          </ScrollReveal>
         </div>
       </section>
 
       {/* Features Section */}
       <section id="features" className="relative py-24 px-6">
         <div className="max-w-7xl mx-auto">
-          <div className="text-center mb-16">
-            <h2 className="text-4xl md:text-5xl font-bold mb-4 bg-gradient-to-b from-white to-zinc-400 bg-clip-text text-transparent">
-              Four AI models. One purpose.
-            </h2>
-            <p className="text-zinc-400 text-lg max-w-2xl mx-auto">
-              Every link you click is analyzed by multiple machine learning models working together
-            </p>
-          </div>
+          <ScrollReveal>
+            <div className="text-center mb-16">
+              <h2 className="text-4xl md:text-5xl font-bold mb-4">
+                <GradientText>Four AI models. One purpose.</GradientText>
+              </h2>
+              <p className="text-zinc-400 text-lg max-w-2xl mx-auto">
+                Every link analyzed by multiple machine learning models
+              </p>
+            </div>
+          </ScrollReveal>
 
           <div className="grid md:grid-cols-2 gap-6">
             {[
@@ -384,7 +572,6 @@ export default function Home() {
                 title: 'URL Analysis',
                 description: 'Domain age, SSL certificates, URL patterns, and threat database checks.',
                 gradient: 'from-blue-500/20 to-cyan-500/20',
-                iconBg: 'bg-blue-500/10',
                 iconColor: 'text-blue-400'
               },
               {
@@ -392,7 +579,6 @@ export default function Home() {
                 title: 'Visual Detection',
                 description: 'Screenshot analysis detects fake login pages and fraudulent designs.',
                 gradient: 'from-purple-500/20 to-pink-500/20',
-                iconBg: 'bg-purple-500/10',
                 iconColor: 'text-purple-400'
               },
               {
@@ -400,7 +586,6 @@ export default function Home() {
                 title: 'Content Analysis',
                 description: 'NLP models read page content for phishing keywords and credential harvesting.',
                 gradient: 'from-emerald-500/20 to-teal-500/20',
-                iconBg: 'bg-emerald-500/10',
                 iconColor: 'text-emerald-400'
               },
               {
@@ -408,20 +593,20 @@ export default function Home() {
                 title: 'Real-Time Protection',
                 description: 'Analyzes links in under 50ms. Warns before you visit dangerous sites.',
                 gradient: 'from-orange-500/20 to-red-500/20',
-                iconBg: 'bg-orange-500/10',
                 iconColor: 'text-orange-400'
               }
             ].map((feature, i) => (
-              <div 
-                key={i} 
-                className={`group p-8 rounded-2xl border border-white/5 bg-gradient-to-br ${feature.gradient} hover:border-white/10 transition-all hover:scale-[1.02]`}
-              >
-                <div className={`w-14 h-14 rounded-2xl ${feature.iconBg} flex items-center justify-center mb-6 group-hover:scale-110 transition-transform`}>
-                  <feature.icon className={`w-7 h-7 ${feature.iconColor}`} />
-                </div>
-                <h3 className="text-2xl font-semibold mb-3">{feature.title}</h3>
-                <p className="text-zinc-400 leading-relaxed">{feature.description}</p>
-              </div>
+              <ScrollReveal key={i} delay={i * 100}>
+                <GlowCard gradient={`${feature.gradient}`} className="h-full">
+                  <div className="p-8 h-full">
+                    <div className={`w-14 h-14 rounded-2xl bg-zinc-800 flex items-center justify-center mb-6 ${feature.iconColor} group-hover:scale-110 transition-transform`}>
+                      <feature.icon className="w-7 h-7" />
+                    </div>
+                    <h3 className="text-2xl font-semibold mb-3">{feature.title}</h3>
+                    <p className="text-zinc-400 leading-relaxed">{feature.description}</p>
+                  </div>
+                </GlowCard>
+              </ScrollReveal>
             ))}
           </div>
         </div>
@@ -430,111 +615,116 @@ export default function Home() {
       {/* Demo Section */}
       <section id="demo" className="relative py-24 px-6">
         <div className="max-w-4xl mx-auto">
-          <div className="text-center mb-12">
-            <h2 className="text-4xl md:text-5xl font-bold mb-4 bg-gradient-to-b from-white to-zinc-400 bg-clip-text text-transparent">
-              Try it now
-            </h2>
-            <p className="text-zinc-400 text-lg">
-              Enter any website URL to see real-time analysis
-            </p>
-          </div>
-
-          <div className="bg-zinc-900/50 backdrop-blur-sm rounded-2xl border border-white/5 p-8">
-            {/* Server Status */}
-            {!serverAvailable && (
-              <div className="mb-6 p-4 bg-yellow-500/10 border border-yellow-500/20 rounded-xl flex items-center gap-3">
-                <Server className="w-5 h-5 text-yellow-500" />
-                <div className="text-sm text-yellow-400">
-                  <strong>Demo Mode:</strong> Analysis server unavailable. Using offline detection algorithms.
-                </div>
-              </div>
-            )}
-
-            <div className="flex flex-col sm:flex-row gap-4 mb-6">
-              <input
-                type="text"
-                value={urlInput}
-                onChange={(e) => setUrlInput(e.target.value)}
-                onKeyDown={(e) => e.key === 'Enter' && analyzeUrl()}
-                placeholder="https://example.com"
-                className="flex-1 px-5 py-4 bg-black/50 border border-white/10 rounded-xl text-white placeholder-zinc-500 focus:outline-none focus:border-emerald-500/50 transition-colors"
-              />
-              <button
-                onClick={analyzeUrl}
-                disabled={isLoading || !urlInput.trim()}
-                className="px-8 py-4 bg-gradient-to-r from-emerald-500 to-emerald-600 hover:from-emerald-400 hover:to-emerald-500 disabled:opacity-50 text-white font-semibold rounded-xl flex items-center justify-center gap-2 transition-all shadow-lg shadow-emerald-500/20"
-              >
-                {isLoading ? (
-                  <>
-                    <div className="w-5 h-5 border-2 border-white/30 border-t-white rounded-full animate-spin" />
-                    Analyzing...
-                  </>
-                ) : (
-                  <>
-                    <Zap className="w-5 h-5" />
-                    Check URL
-                  </>
-                )}
-              </button>
+          <ScrollReveal>
+            <div className="text-center mb-12">
+              <h2 className="text-4xl md:text-5xl font-bold mb-4">
+                <GradientText>Try it now</GradientText>
+              </h2>
+              <p className="text-zinc-400 text-lg">
+                Enter any website URL to see real-time analysis
+              </p>
             </div>
+          </ScrollReveal>
 
-            {demoResult && (
-              <div className="border-t border-white/5 pt-6 animate-in fade-in slide-in-from-bottom-4 duration-500">
-                <div className={`flex items-center gap-4 mb-6 p-6 rounded-xl ${
-                  demoResult.level === 'HIGH' ? 'bg-red-500/10 border border-red-500/20' :
-                  demoResult.level === 'MEDIUM' ? 'bg-yellow-500/10 border border-yellow-500/20' :
-                  'bg-emerald-500/10 border border-emerald-500/20'
-                }`}>
-                  {demoResult.level === 'HIGH' ? (
-                    <AlertTriangle className="w-10 h-10 text-red-500" />
-                  ) : demoResult.level === 'MEDIUM' ? (
-                    <AlertTriangle className="w-10 h-10 text-yellow-500" />
-                  ) : (
-                    <CheckCircle className="w-10 h-10 text-emerald-500" />
-                  )}
-                  <div className="flex-1">
-                    <div className={`text-3xl font-bold ${
-                      demoResult.level === 'HIGH' ? 'text-red-500' :
-                      demoResult.level === 'MEDIUM' ? 'text-yellow-500' :
-                      'text-emerald-500'
+          <ScrollReveal delay={100}>
+            <GlowCard>
+              <div className="p-8">
+                {!serverAvailable && (
+                  <div className="mb-6 p-4 bg-yellow-500/10 border border-yellow-500/20 rounded-xl flex items-center gap-3">
+                    <Server className="w-5 h-5 text-yellow-500" />
+                    <div className="text-sm text-yellow-400">
+                      <strong>Demo Mode:</strong> Using offline detection algorithms.
+                    </div>
+                  </div>
+                )}
+
+                <div className="flex flex-col sm:flex-row gap-4 mb-6">
+                  <input
+                    type="text"
+                    value={urlInput}
+                    onChange={(e) => setUrlInput(e.target.value)}
+                    onKeyDown={(e) => e.key === 'Enter' && analyzeUrl()}
+                    placeholder="https://example.com"
+                    className="flex-1 px-5 py-4 bg-black/50 border border-white/10 rounded-xl text-white placeholder-zinc-500 focus:outline-none focus:border-emerald-500/50 transition-colors"
+                  />
+                  <button
+                    onClick={analyzeUrl}
+                    disabled={isLoading || !urlInput.trim()}
+                    className="px-8 py-4 bg-emerald-500 hover:bg-emerald-400 disabled:opacity-50 text-black font-semibold rounded-xl flex items-center justify-center gap-2 transition-all"
+                  >
+                    {isLoading ? (
+                      <>
+                        <div className="w-5 h-5 border-2 border-black/30 border-t-black rounded-full animate-spin" />
+                        Analyzing...
+                      </>
+                    ) : (
+                      <>
+                        <Zap className="w-5 h-5" />
+                        Check URL
+                      </>
+                    )}
+                  </button>
+                </div>
+
+                {demoResult && (
+                  <div className="border-t border-white/5 pt-6 animate-in fade-in slide-in-from-bottom-4 duration-500">
+                    <div className={`flex items-center gap-4 mb-6 p-6 rounded-xl ${
+                      demoResult.level === 'HIGH' ? 'bg-red-500/10 border border-red-500/20' :
+                      demoResult.level === 'MEDIUM' ? 'bg-yellow-500/10 border border-yellow-500/20' :
+                      'bg-emerald-500/10 border border-emerald-500/20'
                     }`}>
-                      {demoResult.level} RISK
+                      {demoResult.level === 'HIGH' ? (
+                        <AlertTriangle className="w-10 h-10 text-red-500" />
+                      ) : demoResult.level === 'MEDIUM' ? (
+                        <AlertTriangle className="w-10 h-10 text-yellow-500" />
+                      ) : (
+                        <CheckCircle className="w-10 h-10 text-emerald-500" />
+                      )}
+                      <div className="flex-1">
+                        <div className={`text-3xl font-bold ${
+                          demoResult.level === 'HIGH' ? 'text-red-500' :
+                          demoResult.level === 'MEDIUM' ? 'text-yellow-500' :
+                          'text-emerald-500'
+                        }`}>
+                          {demoResult.level} RISK
+                        </div>
+                        <div className="text-zinc-400">Trust Score: {demoResult.score}/100</div>
+                      </div>
+                      <div className="text-right hidden sm:block">
+                        <div className="text-xs text-zinc-500 mb-1">Response</div>
+                        <div className="text-emerald-400 font-mono text-lg">{demoResult.response_time}ms</div>
+                      </div>
                     </div>
-                    <div className="text-zinc-400">Trust Score: {demoResult.score}/100</div>
-                  </div>
-                  <div className="text-right hidden sm:block">
-                    <div className="text-xs text-zinc-500 mb-1">Response Time</div>
-                    <div className="text-emerald-400 font-mono text-lg">{demoResult.response_time}ms</div>
-                  </div>
-                </div>
 
-                <div className="grid md:grid-cols-2 gap-6">
-                  <div className="bg-black/30 rounded-xl p-5 border border-white/5">
-                    <div className="text-sm text-zinc-500 mb-4 font-semibold uppercase tracking-wider">Risk Factors</div>
-                    <div className="space-y-3">
-                      {demoResult.factors.map((factor, i) => (
-                        <div key={i} className="text-zinc-300 text-sm flex items-start gap-3">
-                          <span className="w-1.5 h-1.5 rounded-full bg-red-400 mt-2 flex-shrink-0" />
-                          {factor}
+                    <div className="grid md:grid-cols-2 gap-6">
+                      <div className="bg-black/30 rounded-xl p-5 border border-white/5">
+                        <div className="text-sm text-zinc-500 mb-4 font-semibold uppercase tracking-wider">Risk Factors</div>
+                        <div className="space-y-3">
+                          {demoResult.factors.map((factor, i) => (
+                            <div key={i} className="text-zinc-300 text-sm flex items-start gap-3">
+                              <span className="w-1.5 h-1.5 rounded-full bg-red-400 mt-2 flex-shrink-0" />
+                              {factor}
+                            </div>
+                          ))}
                         </div>
-                      ))}
+                      </div>
+                      <div className="bg-black/30 rounded-xl p-5 border border-white/5">
+                        <div className="text-sm text-zinc-500 mb-4 font-semibold uppercase tracking-wider">Safety Indicators</div>
+                        <div className="space-y-3">
+                          {demoResult.indicators.map((indicator, i) => (
+                            <div key={i} className="text-zinc-300 text-sm flex items-start gap-3">
+                              <CheckCircle className="w-4 h-4 text-emerald-500 mt-0.5 flex-shrink-0" />
+                              {indicator}
+                            </div>
+                          ))}
+                        </div>
+                      </div>
                     </div>
                   </div>
-                  <div className="bg-black/30 rounded-xl p-5 border border-white/5">
-                    <div className="text-sm text-zinc-500 mb-4 font-semibold uppercase tracking-wider">Safety Indicators</div>
-                    <div className="space-y-3">
-                      {demoResult.indicators.map((indicator, i) => (
-                        <div key={i} className="text-zinc-300 text-sm flex items-start gap-3">
-                          <CheckCircle className="w-4 h-4 text-emerald-500 mt-0.5 flex-shrink-0" />
-                          {indicator}
-                        </div>
-                      ))}
-                    </div>
-                  </div>
-                </div>
+                )}
               </div>
-            )}
-          </div>
+            </GlowCard>
+          </ScrollReveal>
         </div>
       </section>
 
@@ -544,7 +734,7 @@ export default function Home() {
           <div className="grid grid-cols-2 md:grid-cols-4 gap-8 mb-12">
             <div className="col-span-2">
               <Link href="/" className="flex items-center gap-2 mb-4 group">
-                <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-emerald-500 to-emerald-600 flex items-center justify-center">
+                <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-emerald-500 to-teal-600 flex items-center justify-center">
                   <Shield className="w-5 h-5 text-white" />
                 </div>
                 <span className="font-bold text-lg group-hover:text-emerald-400 transition-colors">PayGuard</span>
@@ -565,8 +755,8 @@ export default function Home() {
             <div>
               <h4 className="font-semibold mb-4 text-zinc-300">Legal</h4>
               <ul className="space-y-3 text-sm text-zinc-500">
-                <li><Link href="/privacy" className="hover:text-white transition-colors">Privacy Policy</Link></li>
-                <li><Link href="/terms" className="hover:text-white transition-colors">Terms of Service</Link></li>
+                <li><Link href="/privacy" className="hover:text-white transition-colors">Privacy</Link></li>
+                <li><Link href="/terms" className="hover:text-white transition-colors">Terms</Link></li>
               </ul>
             </div>
           </div>
