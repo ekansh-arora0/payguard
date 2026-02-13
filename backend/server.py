@@ -263,7 +263,9 @@ async def check_risk(
     except Exception as e:
         _record_request("/risk", 500, time.time() - t0)
         logger.error(f"Error checking risk: {str(e)}")
-        raise HTTPException(status_code=500, detail="Risk check failed")
+        import traceback
+        logger.error(traceback.format_exc())
+        raise HTTPException(status_code=500, detail=f"Risk check failed: {str(e)}")
 
 @api_router.get("/risk", response_model=RiskScore)
 async def get_risk_by_url(
