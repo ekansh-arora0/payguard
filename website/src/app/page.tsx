@@ -56,9 +56,9 @@ export default function Home() {
   const [stats, setStats] = useState({
     threats_analyzed: 1247,
     active_users: 89,
-    high_risk: 0,
-    medium_risk: 0,
-    low_risk: 0
+    high_risk_detected: 0,
+    medium_risk_detected: 0,
+    low_risk_detected: 0
   })
   const [isMenuOpen, setIsMenuOpen] = useState(false)
   const [copiedMac, setCopiedMac] = useState(false)
@@ -240,7 +240,7 @@ export default function Home() {
           <div className="inline-flex items-center gap-2 px-4 py-2 rounded-full border border-emerald-500/20 bg-emerald-500/5 mb-8 hover:border-emerald-500/40 transition-colors cursor-pointer">
             <Sparkles className="w-4 h-4 text-emerald-400" />
             <span className="text-sm text-emerald-400">
-              {stats.threats_analyzed.toLocaleString()} URLs analyzed and counting
+              {stats.threats_analyzed?.toLocaleString() || '1,247'} URLs analyzed and counting
             </span>
           </div>
           
@@ -282,9 +282,9 @@ export default function Home() {
           {/* Stats Row */}
           <div className="mt-16 grid grid-cols-2 md:grid-cols-4 gap-8 max-w-3xl mx-auto">
             {[
-              { label: 'Beta Users', value: stats.active_users.toLocaleString() },
-              { label: 'URLs Analyzed', value: stats.threats_analyzed.toLocaleString() },
-              { label: 'Threats Blocked', value: stats.high_risk.toLocaleString() || '128+' },
+              { label: 'Beta Users', value: stats.active_users?.toLocaleString() || '89' },
+              { label: 'URLs Analyzed', value: stats.threats_analyzed?.toLocaleString() || '1,247' },
+              { label: 'Threats Blocked', value: stats.high_risk_detected?.toLocaleString() || '128+' },
               { label: 'Avg Response', value: '<50ms' },
             ].map((stat, i) => (
               <div key={i} className="text-center">
@@ -575,7 +575,7 @@ export default function Home() {
               © 2025 PayGuard. Open source under MIT License.
             </div>
             <div className="text-sm text-zinc-600">
-              {stats.threats_analyzed.toLocaleString()} scams detected and counting
+              {stats.threats_analyzed?.toLocaleString() || '1,247'} scams detected and counting
             </div>
           </div>
         </div>
