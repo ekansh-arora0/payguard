@@ -209,6 +209,141 @@ class PayGuardApp(rumps.App):
         self._check_backend()
         self._update_status()
         self.logger.info(f"Ready. Backend: {'online' if self.backend_online else 'offline'}")
+        # Start browser monitoring
+        threading.Thread(target=self._monitor_browser_history, daemon=True).start()
+        self.logger.info("Browser monitoring started")
+        
+    def _monitor_browser_history(self):
+        """Monitor browser history for suspicious URLs."""
+        checked_urls = set()
+        while True:
+            try:
+                # Check Safari history
+                safari_history = self._get_safari_history()
+                for url in safari_history:
+                    if url not in checked_urls:
+                        checked_urls.add(url)
+                        self._check_url(url, source="Safari")
+                        
+                # Check Chrome history  
+                chrome_history = self._get_chrome_history()
+                for url in chrome_history:
+                    if url not in checked_urls:
+                        checked_urls.add(url)
+                        self._check_url(url, source="Chrome")
+                        
+                # Keep set from growing too large
+                if len(checked_urls) > 1000:
+                    checked_urls = set(list(checked_urls)[-500:])
+                    
+            except Exception as e:
+                self.logger.error(f"Browser monitor error: {e}")
+                
+            time.sleep(5)  # Check every 5 seconds
+            
+    def _get_safari_history(self):
+        """Get recent Safari URLs from History.db."""
+        urls = []
+        try:
+            history_path = os.path.expanduser("~/Library/Safari/History.db")
+            if os.path.exists(history_path):
+                import sqlite3
+                conn = sqlite3.connect(history_path)
+                cursor = conn.cursor()
+                # Get URLs from last 5 minutes
+                cursor.execute("""
+                    SELECT url FROM history_items 
+                    WHERE visit_time > (strftime('%s', 'now') - 300) * 1000000
+                    ORDER BY visit_time DESC 
+                    LIMIT 10
+                """)
+                urls = [row[0] for row in cursor.fetchall()]
+                conn.close()
+        except Exception as e:
+            self.logger.debug(f"Safari history error: {e}")
+        return urls
+        
+    def _get_chrome_history(self):
+        """Get recent Chrome URLs from History."""
+        urls = []
+        try:
+            history_path = os.path.expanduser("~/Library/Application Support/Google/Chrome/Default/History")
+            if os.path.exists(history_path):
+                import sqlite3
+                # Copy file to avoid lock
+                import tempfile
+                temp_db = tempfile.NamedTemporaryFile(delete=False)
+                temp_db.close()
+                import shutil
+                shutil.copy2(history_path, temp_db.name)
+                
+                conn = sqlite3.connect(temp_db.name)
+                cursor = conn.cursor()
+                # Get URLs from last 5 minutes
+                cursor.execute("""
+                    SELECT url FROM urls 
+                    WHERE last_visit_time > (strftime('%s', 'now') - 300) * 1000000
+                    ORDER BY last_visit_time DESC 
+                    LIMIT 10
+                """)
+                urls = [row[0] for row in cursor.fetchall()]
+                conn.close()
+                os.unlink(temp_db.name)
+        except Exception as e:
+            self.logger.debug(f"Chrome history error: {e}")
+        return urls
+        
+    def _check_url(self, url, source="browser"):
+        """Check a URL for threats."""
+        try:
+            if not self.backend_online:
+                return
+                
+            # Skip common safe domains
+            safe_domains = ['google.com', 'youtube.com', 'facebook.com', 'twitter.com', 
+                          'apple.com', 'microsoft.com', 'github.com', 'stackoverflow.com',
+                          'reddit.com', 'amazon.com', 'netflix.com', 'icloud.com']
+            if any(domain in url.lower() for domain in safe_domains):
+                return
+                
+            self.logger.info(f"Checking {source} URL: {url}")
+            
+            # Check with backend
+            resp = requests.post(
+                f"{BACKEND_URL}/api/v1/risk?fast=true",
+                headers={"Content-Type": "application/json", "X-API-Key": "demo_key"},
+                json={"url": url},
+                timeout=3
+            )
+            
+            if resp.status_code == 200:
+                data = resp.json()
+                if data.get("risk_level", "").lower() == "high":
+                    self._show_url_threat_alert(url, data)
+                    self.threats_detected += 1
+                    self.scans_performed += 1
+                    self.last_scan_time = datetime.now()
+                    
+        except Exception as e:
+            self.logger.error(f"URL check error: {e}")
+            
+    def _show_url_threat_alert(self, url, data):
+        """Show popup alert for suspicious URL."""
+        try:
+            self._play_alert()
+            risk_factors = data.get("risk_factors", ["Suspicious website detected"])
+            factors_str = "\n".join([f"• {f}" for f in risk_factors[:3]])
+            
+            msg = f"⚠️ THREAT DETECTED ⚠️\n\nURL: {url[:60]}...\n\nRisk Level: HIGH\n\nRisk Factors:\n{factors_str}\n\n⚠️ Do not enter passwords or payment info on this site!"
+            
+            subprocess.run([
+                "osascript", "-e",
+                f'display dialog "{msg}" with title "🚨 PayGuard Alert" buttons {{"OK"}} default button "OK" with icon stop'
+            ], capture_output=True)
+            
+            self.logger.info(f"Threat alert shown for: {url}")
+        except Exception as e:
+            self.logger.error(f"Alert error: {e}")
 
     def _check_backend(self):
         if not HAS_REQUESTS:

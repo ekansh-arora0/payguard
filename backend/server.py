@@ -218,7 +218,26 @@ SUSPICIOUS_KEYWORDS = [
     ('bitcoin', 35), ('crypto', 30), ('wallet', 20), ('payment', 15), ('billing', 20),
 ]
 
-def quick_risk_analysis(url: str) -> RiskScore:
+async def check_redirects(url: str) -> tuple[str, list[str]]:
+    """Follow redirects and return final URL + redirect chain."""
+    import httpx
+    redirect_chain = [url]
+    try:
+        async with httpx.AsyncClient(follow_redirects=True, timeout=10.0) as client:
+            resp = await client.get(url, headers={"User-Agent": "PayGuard/1.0"})
+            final_url = str(resp.url)
+            # Build redirect chain from history
+            for redirect in resp.history:
+                redirect_url = str(redirect.url)
+                if redirect_url not in redirect_chain:
+                    redirect_chain.append(redirect_url)
+            if final_url not in redirect_chain:
+                redirect_chain.append(final_url)
+            return final_url, redirect_chain
+    except Exception:
+        return url, redirect_chain
+
+def quick_risk_analysis(url: str, check_redirect: bool = False) -> RiskScore:
     """Production-ready fast URL analysis - detects phishing patterns reliably."""
     import re
     from urllib.parse import urlparse
@@ -370,21 +389,50 @@ def quick_risk_analysis(url: str) -> RiskScore:
 async def check_risk(
     request: RiskCheckRequest,
     api_key: str = Depends(require_api_key),
-    fast: bool = True  # Default to fast mode
+    fast: bool = True,  # Default to fast mode
+    follow_redirects: bool = True  # Follow redirects to catch scam redirects
 ):
     """
     Main endpoint to check risk score for a URL.
     Set fast=false for full ML analysis (slower).
+    Set follow_redirects=true to check where links actually go.
     """
     t0 = time.time()
     try:
         await api_key_manager.validate_api_key(api_key)
         
-        logger.info(f"Checking risk for URL: {request.url} (fast={fast})")
+        logger.info(f"Checking risk for URL: {request.url} (fast={fast}, follow_redirects={follow_redirects})")
+        
+        # Check redirects first if requested
+        final_url = request.url
+        redirect_chain = [request.url]
+        redirect_risk_factors = []
+        
+        if follow_redirects:
+            try:
+                final_url, redirect_chain = await check_redirects(request.url)
+                if len(redirect_chain) > 1:
+                    logger.info(f"URL redirects: {' -> '.join(redirect_chain)}")
+                    redirect_risk_factors.append(f"🔗 Redirect chain detected ({len(redirect_chain)} hops)")
+                    # Check if any redirect in chain is suspicious
+                    for redirect_url in redirect_chain[1:]:  # Skip original
+                        redirect_analysis = quick_risk_analysis(redirect_url)
+                        if redirect_analysis.risk_level == RiskLevel.HIGH:
+                            redirect_risk_factors.append(f"Redirects to suspicious site: {redirect_url}")
+                            break
+            except Exception as e:
+                logger.warning(f"Redirect check failed: {e}")
         
         # Use quick analysis for demo speed
         if fast:
-            risk_score = quick_risk_analysis(request.url)
+            risk_score = quick_risk_analysis(final_url)
+            # Add redirect information
+            if redirect_risk_factors:
+                risk_score.risk_factors = redirect_risk_factors + risk_score.risk_factors
+                # Increase risk if redirects to suspicious site
+                if any("Redirects to suspicious" in rf for rf in redirect_risk_factors):
+                    risk_score.risk_level = RiskLevel.HIGH
+                    risk_score.trust_score = max(0, risk_score.trust_score - 20)
             _record_request("/risk", 200, time.time() - t0, risk_score.risk_level.value)
             return risk_score
         
@@ -392,12 +440,12 @@ async def check_risk(
         html = None
         try:
             async with httpx.AsyncClient(timeout=3.0) as http_client:
-                resp = await http_client.get(request.url, headers={"User-Agent": "PayGuard/1.0"}, follow_redirects=True)
+                resp = await http_client.get(final_url, headers={"User-Agent": "PayGuard/1.0"}, follow_redirects=True)
                 if resp.status_code < 500:
                     html = resp.text[:100000]
         except Exception:
             html = None
-        risk_score = await risk_engine.calculate_risk(request.url, content=html)
+        risk_score = await risk_engine.calculate_risk(final_url, content=html)
         # Overlay text scam analysis if provided
         try:
             if request.overlay_text:
