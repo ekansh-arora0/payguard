@@ -368,12 +368,12 @@ export default function Home() {
         .animate-gradient-x { animation: gradient-x 3s ease infinite; }
       `}</style>
 
-      {/* Top Banner - Beta Notice */}
+      {/* Top Banner */}
       <div className="bg-emerald-500/10 border-b border-emerald-500/20 py-2 px-4">
         <div className="max-w-7xl mx-auto flex items-center justify-center gap-2 text-sm">
           <Sparkles className="w-4 h-4 text-emerald-400" />
           <span className="text-emerald-400">
-            <strong>Beta Release</strong> - Free while we gather feedback
+            <strong>🚀 NEW:</strong> Now monitors browser history & tracks redirects in real-time
           </span>
         </div>
       </div>
@@ -444,8 +444,9 @@ export default function Home() {
           
           <ScrollReveal delay={200}>
             <p className="text-xl text-zinc-400 mb-6 leading-relaxed max-w-2xl mx-auto">
-              AI-powered tool that catches fake PayPal, Amazon, and bank login pages. 
-              <strong className="text-white"> Not perfect, but pretty good.</strong>
+              AI-powered protection that catches fake PayPal, Amazon, and bank sites
+              <strong className="text-white"> in real-time</strong>. 
+              Now with redirect tracking & browser monitoring.
             </p>
           </ScrollReveal>
 
@@ -897,11 +898,11 @@ export default function Home() {
         <div className="max-w-4xl mx-auto text-center">
           <ScrollReveal>
             <h2 className="text-4xl md:text-5xl font-bold mb-6">
-              <span className="text-white">Better than nothing</span>
+              <span className="text-white">Don't get scammed</span>
             </h2>
             <p className="text-xl text-zinc-400 mb-8 max-w-2xl mx-auto">
-              It's not perfect, but it catches the obvious stuff. 
-              And it's <strong className="text-white">completely free</strong>.
+              Join <strong className="text-white">89 beta users</strong> already protected. 
+              <strong className="text-white"> Free during beta</strong>.
             </p>
             <a 
               href="#install" 
@@ -931,8 +932,7 @@ export default function Home() {
                 <span className="font-bold text-lg group-hover:text-emerald-400 transition-colors">PayGuard</span>
               </Link>
               <p className="text-zinc-400 text-sm max-w-sm leading-relaxed mb-4">
-                Open-source phishing detection. Not perfect, but pretty good. 
-                Free forever.
+                AI-powered phishing detection with real-time browser monitoring and redirect tracking.
               </p>
               <div className="flex items-center gap-2 text-sm text-zinc-500">
                 <span>Made with</span>
