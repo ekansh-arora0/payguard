@@ -390,8 +390,8 @@ class PayGuardApp(rumps.App):
                 self.logger.info(f"Alert cooldown active, skipping popup for: {url[:60]}")
                 return
             
-            # No sound - silent operation
-            # self._play_alert()  # Commented out for silent operation
+            # Play alert sound
+            self._play_alert()
             
             risk_level = data.get("risk_level", "HIGH")
             risk_factors = data.get("risk_factors", ["Suspicious website detected"])
