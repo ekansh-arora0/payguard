@@ -263,7 +263,7 @@ class PayGuardApp(rumps.App):
             except Exception as e:
                 self.logger.error(f"Browser monitor error: {e}")
                 
-            time.sleep(5)  # Check every 5 seconds
+            time.sleep(2)  # Check every 2 seconds for faster detection
             
     def _get_safari_history(self):
         """Get ONLY THE MOST RECENT Safari URL from History.db."""
@@ -345,6 +345,7 @@ class PayGuardApp(rumps.App):
         """Check a URL for threats."""
         try:
             if not self.backend_online:
+                self.logger.warning("Backend offline, cannot check URL")
                 return
                 
             # Skip common safe domains
@@ -352,11 +353,13 @@ class PayGuardApp(rumps.App):
                           'apple.com', 'microsoft.com', 'github.com', 'stackoverflow.com',
                           'reddit.com', 'amazon.com', 'netflix.com', 'icloud.com']
             if any(domain in url.lower() for domain in safe_domains):
+                self.logger.info(f"Skipping safe domain: {url[:60]}")
                 return
                 
-            self.logger.info(f"Checking {source} URL: {url}")
+            self.logger.info(f"🔍 CHECKING {source} URL: {url}")
             
             # Check with backend
+            self.logger.info("Calling backend API...")
             resp = requests.post(
                 f"{BACKEND_URL}/api/v1/risk?fast=true",
                 headers={"Content-Type": "application/json", "X-API-Key": "demo_key"},
@@ -364,13 +367,25 @@ class PayGuardApp(rumps.App):
                 timeout=3
             )
             
+            self.logger.info(f"Backend response status: {resp.status_code}")
+            
             if resp.status_code == 200:
                 data = resp.json()
-                if data.get("risk_level", "").lower() == "high":
+                risk_level = data.get("risk_level", "unknown")
+                trust_score = data.get("trust_score", 0)
+                self.logger.info(f"Risk Level: {risk_level}, Score: {trust_score}")
+                
+                # Show alert for HIGH or MEDIUM risk
+                if risk_level.lower() in ["high", "medium"]:
+                    self.logger.info(f"🚨 {risk_level.upper()} RISK DETECTED - SHOWING ALERT")
                     self._show_url_threat_alert(url, data)
                     self.threats_detected += 1
                     self.scans_performed += 1
                     self.last_scan_time = datetime.now()
+                else:
+                    self.logger.info(f"Risk level is {risk_level}, not showing alert")
+            else:
+                self.logger.error(f"Backend returned error: {resp.status_code}")
                     
         except Exception as e:
             self.logger.error(f"URL check error: {e}")
