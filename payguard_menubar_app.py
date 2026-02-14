@@ -145,8 +145,11 @@ class PayGuardApp(rumps.App):
         self.logger.info("=" * 50)
         self.logger.info(f"PayGuard v{APP_VERSION} starting...")
         
+        self.logger.info("Acquiring lock...")
         if not self._acquire_lock():
+            self.logger.info("Lock acquisition failed - another instance running")
             return
+        self.logger.info("Lock acquired successfully")
         
         self.backend_online = False
         self.scans_performed = 0
@@ -172,6 +175,7 @@ class PayGuardApp(rumps.App):
             rumps.MenuItem("Quit PayGuard", callback=self.quit_app),
         ]
         
+        self.logger.info("Starting _initial_setup thread...")
         threading.Thread(target=self._initial_setup, daemon=True).start()
 
     def _setup_logging(self):
@@ -205,13 +209,23 @@ class PayGuardApp(rumps.App):
             return True
 
     def _initial_setup(self):
-        time.sleep(0.5)
-        self._check_backend()
-        self._update_status()
-        self.logger.info(f"Ready. Backend: {'online' if self.backend_online else 'offline'}")
-        # Start browser monitoring
-        threading.Thread(target=self._monitor_browser_history, daemon=True).start()
-        self.logger.info("Browser monitoring started")
+        self.logger.info("_initial_setup started")
+        try:
+            time.sleep(0.5)
+            self.logger.info("Checking backend...")
+            self._check_backend()
+            self.logger.info("Updating status...")
+            self._update_status()
+            self.logger.info(f"Ready. Backend: {'online' if self.backend_online else 'offline'}")
+            # Start browser monitoring
+            self.logger.info("Starting browser monitoring thread...")
+            monitor_thread = threading.Thread(target=self._monitor_browser_history, daemon=True)
+            monitor_thread.start()
+            self.logger.info("Browser monitoring thread started successfully")
+        except Exception as e:
+            self.logger.error(f"Initial setup error: {e}")
+            import traceback
+            self.logger.error(traceback.format_exc())
         
     def _monitor_browser_history(self):
         """Monitor browser history for suspicious URLs."""
