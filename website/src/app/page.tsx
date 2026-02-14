@@ -445,8 +445,8 @@ export default function Home() {
           <ScrollReveal delay={200}>
             <p className="text-xl text-zinc-400 mb-6 leading-relaxed max-w-2xl mx-auto">
               AI-powered protection that catches fake PayPal, Amazon, and bank sites
-              <strong className="text-white"> in real-time</strong>. 
-              Now with redirect tracking & browser monitoring.
+              <strong className="text-white"> before you enter your password</strong>. 
+              Monitors your browser in real-time and tracks redirects to catch scams.
             </p>
           </ScrollReveal>
 
@@ -505,91 +505,6 @@ export default function Home() {
                 </div>
               </ScrollReveal>
             ))}
-          </div>
-        </div>
-      </section>
-
-      {/* Honest Limitations Section */}
-      <section className="relative py-24 px-6 bg-zinc-900/30">
-        <div className="max-w-4xl mx-auto">
-          <ScrollReveal>
-            <div className="text-center mb-16">
-              <div className="inline-flex items-center gap-2 px-4 py-2 rounded-full bg-yellow-500/10 border border-yellow-500/20 text-yellow-400 text-sm mb-6">
-                <Info className="w-4 h-4" />
-                Important
-              </div>
-              <h2 className="text-4xl md:text-5xl font-bold mb-4">
-                <span className="text-white">What PayGuard</span>{' '}
-                <span className="text-emerald-400">actually does</span>
-              </h2>
-              <p className="text-zinc-400 text-lg max-w-2xl mx-auto">
-                We're being honest about capabilities and limitations.
-              </p>
-            </div>
-          </ScrollReveal>
-
-          <div className="grid md:grid-cols-2 gap-6">
-            <ScrollReveal delay={100}>
-              <div className="p-8 rounded-2xl bg-emerald-500/10 border border-emerald-500/20">
-                <h3 className="text-xl font-semibold mb-4 text-emerald-400 flex items-center gap-2">
-                  <CheckCircle className="w-5 h-5" />
-                  Catches These
-                </h3>
-                <ul className="space-y-3 text-zinc-300">
-                  <li className="flex items-start gap-2">
-                    <span className="text-emerald-500 mt-1">✓</span>
-                    <span>Fake PayPal, Amazon, Apple login pages</span>
-                  </li>
-                  <li className="flex items-start gap-2">
-                    <span className="text-emerald-500 mt-1">✓</span>
-                    <span>Typosquatting (amaz0n, paypa1, etc.)</span>
-                  </li>
-                  <li className="flex items-start gap-2">
-                    <span className="text-emerald-500 mt-1">✓</span>
-                    <span>Suspicious keywords in URLs</span>
-                  </li>
-                  <li className="flex items-start gap-2">
-                    <span className="text-emerald-500 mt-1">✓</span>
-                    <span>IP addresses instead of domains</span>
-                  </li>
-                  <li className="flex items-start gap-2">
-                    <span className="text-emerald-500 mt-1">✓</span>
-                    <span>Known scam patterns</span>
-                  </li>
-                </ul>
-              </div>
-            </ScrollReveal>
-
-            <ScrollReveal delay={200}>
-              <div className="p-8 rounded-2xl bg-yellow-500/10 border border-yellow-500/20">
-                <h3 className="text-xl font-semibold mb-4 text-yellow-400 flex items-center gap-2">
-                  <AlertTriangle className="w-5 h-5" />
-                  Limitations
-                </h3>
-                <ul className="space-y-3 text-zinc-300">
-                  <li className="flex items-start gap-2">
-                    <span className="text-yellow-500 mt-1">!</span>
-                    <span>Links that redirect after you click</span>
-                  </li>
-                  <li className="flex items-start gap-2">
-                    <span className="text-yellow-500 mt-1">!</span>
-                    <span>Zero-day phishing sites (new scams)</span>
-                  </li>
-                  <li className="flex items-start gap-2">
-                    <span className="text-yellow-500 mt-1">!</span>
-                    <span>Social engineering via email content</span>
-                  </li>
-                  <li className="flex items-start gap-2">
-                    <span className="text-yellow-500 mt-1">!</span>
-                    <span>Sophisticated lookalike domains</span>
-                  </li>
-                  <li className="flex items-start gap-2">
-                    <span className="text-yellow-500 mt-1">!</span>
-                    <span>Not a replacement for common sense</span>
-                  </li>
-                </ul>
-              </div>
-            </ScrollReveal>
           </div>
         </div>
       </section>
@@ -816,18 +731,6 @@ export default function Home() {
                         {example.label}
                       </button>
                     ))}
-                  </div>
-                </div>
-
-                {/* Important Note */}
-                <div className="mb-6 p-4 bg-yellow-500/10 border border-yellow-500/20 rounded-xl">
-                  <div className="flex items-start gap-3">
-                    <Info className="w-5 h-5 text-yellow-500 mt-0.5 flex-shrink-0" />
-                    <div className="text-sm text-zinc-300">
-                      <strong className="text-yellow-400">Important:</strong> This only analyzes the URL itself. 
-                      It won't catch links that redirect to scams after you click, or sophisticated new phishing sites. 
-                      Always use common sense.
-                    </div>
                   </div>
                 </div>
 
