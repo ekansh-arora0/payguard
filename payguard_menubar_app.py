@@ -142,19 +142,18 @@ class PayGuardApp(rumps.App):
         super().__init__(ICON_PROTECTED, title=ICON_PROTECTED, quit_button=None)
         
         self._setup_logging()
-        self.logger.info("=" * 50)
         self.logger.info(f"PayGuard v{APP_VERSION} starting...")
         
-        self.logger.info("Acquiring lock...")
         if not self._acquire_lock():
-            self.logger.info("Lock acquisition failed - another instance running")
+            self.logger.info("Another instance already running")
             return
-        self.logger.info("Lock acquired successfully")
         
         self.backend_online = False
         self.scans_performed = 0
         self.threats_detected = 0
         self.last_scan_time = None
+        self.last_alert_time = 0  # Track last popup to prevent spam
+        self.alert_cooldown = 30  # Seconds between alerts
         
         self.menu = [
             rumps.MenuItem("PayGuard", callback=None),
@@ -175,7 +174,6 @@ class PayGuardApp(rumps.App):
             rumps.MenuItem("Quit PayGuard", callback=self.quit_app),
         ]
         
-        self.logger.info("Starting _initial_setup thread...")
         threading.Thread(target=self._initial_setup, daemon=True).start()
 
     def _setup_logging(self):
@@ -209,30 +207,23 @@ class PayGuardApp(rumps.App):
             return True
 
     def _initial_setup(self):
-        self.logger.info("_initial_setup started")
         try:
             time.sleep(0.5)
-            self.logger.info("Checking backend...")
             self._check_backend()
-            self.logger.info("Updating status...")
             self._update_status()
-            self.logger.info(f"Ready. Backend: {'online' if self.backend_online else 'offline'}")
             # Start browser monitoring
-            self.logger.info("Starting browser monitoring thread...")
             monitor_thread = threading.Thread(target=self._monitor_browser_history, daemon=True)
             monitor_thread.start()
-            self.logger.info("Browser monitoring thread started successfully")
+            self.logger.info("PayGuard ready - monitoring browsers silently")
         except Exception as e:
-            self.logger.error(f"Initial setup error: {e}")
-            import traceback
-            self.logger.error(traceback.format_exc())
+            self.logger.error(f"Setup error: {e}")
         
     def _monitor_browser_history(self):
-        """Monitor browser history for suspicious URLs."""
+        """Monitor browser history for suspicious URLs - runs silently in background."""
         checked_urls = set()
         last_safari_url = None
         last_chrome_url = None
-        self.logger.info("Browser monitoring started - checking Safari & Chrome every 5 seconds")
+        self.logger.info("Browser monitoring started silently")
         
         while True:
             try:
@@ -243,7 +234,7 @@ class PayGuardApp(rumps.App):
                     if url != last_safari_url and url not in checked_urls:
                         last_safari_url = url
                         checked_urls.add(url)
-                        self.logger.info(f"New Safari URL: {url[:80]}")
+                        self.logger.debug(f"New Safari URL: {url[:80]}")  # Debug level - quiet
                         self._check_url(url, source="Safari")
                         
                 # Check Chrome history - ONLY MOST RECENT  
@@ -253,7 +244,7 @@ class PayGuardApp(rumps.App):
                     if url != last_chrome_url and url not in checked_urls:
                         last_chrome_url = url
                         checked_urls.add(url)
-                        self.logger.info(f"New Chrome URL: {url[:80]}")
+                        self.logger.debug(f"New Chrome URL: {url[:80]}")  # Debug level - quiet
                         self._check_url(url, source="Chrome")
                         
                 # Keep set from growing too large
@@ -261,9 +252,9 @@ class PayGuardApp(rumps.App):
                     checked_urls = set(list(checked_urls)[-500:])
                     
             except Exception as e:
-                self.logger.error(f"Browser monitor error: {e}")
+                self.logger.debug(f"Browser monitor error: {e}")  # Debug level
                 
-            time.sleep(2)  # Check every 2 seconds for faster detection
+            time.sleep(2)  # Check every 2 seconds
             
     def _get_safari_history(self):
         """Get ONLY THE MOST RECENT Safari URL from History.db."""
@@ -391,19 +382,29 @@ class PayGuardApp(rumps.App):
             self.logger.error(f"URL check error: {e}")
             
     def _show_url_threat_alert(self, url, data):
-        """Show popup alert for suspicious URL."""
+        """Show popup alert for suspicious URL - with cooldown to prevent spam."""
         try:
-            self._play_alert()
+            # Check cooldown to prevent spam
+            current_time = time.time()
+            if current_time - self.last_alert_time < self.alert_cooldown:
+                self.logger.info(f"Alert cooldown active, skipping popup for: {url[:60]}")
+                return
+            
+            # No sound - silent operation
+            # self._play_alert()  # Commented out for silent operation
+            
+            risk_level = data.get("risk_level", "HIGH")
             risk_factors = data.get("risk_factors", ["Suspicious website detected"])
             factors_str = "\n".join([f"• {f}" for f in risk_factors[:3]])
             
-            msg = f"⚠️ THREAT DETECTED ⚠️\n\nURL: {url[:60]}...\n\nRisk Level: HIGH\n\nRisk Factors:\n{factors_str}\n\n⚠️ Do not enter passwords or payment info on this site!"
+            msg = f"⚠️ THREAT DETECTED ⚠️\n\nURL: {url[:60]}...\n\nRisk Level: {risk_level}\n\nRisk Factors:\n{factors_str}\n\n⚠️ Do not enter passwords or payment info on this site!"
             
             subprocess.run([
                 "osascript", "-e",
                 f'display dialog "{msg}" with title "🚨 PayGuard Alert" buttons {{"OK"}} default button "OK" with icon stop'
             ], capture_output=True)
             
+            self.last_alert_time = current_time
             self.logger.info(f"Threat alert shown for: {url}")
         except Exception as e:
             self.logger.error(f"Alert error: {e}")
