@@ -267,6 +267,9 @@ class PayGuardApp(rumps.App):
         urls = []
         try:
             history_path = os.path.expanduser("~/Library/Safari/History.db")
+            self.logger.info(f"Safari history path: {history_path}")
+            self.logger.info(f"Safari history exists: {os.path.exists(history_path)}")
+            
             if os.path.exists(history_path):
                 import sqlite3
                 import tempfile
@@ -275,7 +278,9 @@ class PayGuardApp(rumps.App):
                 # Copy file to avoid lock
                 temp_db = tempfile.NamedTemporaryFile(delete=False, suffix='.db')
                 temp_db.close()
+                self.logger.info(f"Copying Safari history to: {temp_db.name}")
                 shutil.copy2(history_path, temp_db.name)
+                self.logger.info("Safari history copied successfully")
                 
                 conn = sqlite3.connect(temp_db.name)
                 cursor = conn.cursor()
@@ -284,6 +289,7 @@ class PayGuardApp(rumps.App):
                 safari_now = int(time.time()) - 978307200  # Seconds since 2001
                 five_min_ago = (safari_now - 300) * 1000000  # Convert to microseconds
                 
+                self.logger.info(f"Querying Safari history since: {five_min_ago}")
                 cursor.execute("""
                     SELECT url FROM history_items 
                     WHERE visit_time > ?
@@ -293,7 +299,10 @@ class PayGuardApp(rumps.App):
                 urls = [row[0] for row in cursor.fetchall()]
                 conn.close()
                 os.unlink(temp_db.name)
-                self.logger.debug(f"Safari history query found {len(urls)} URLs")
+                self.logger.info(f"Safari history query found {len(urls)} URLs: {urls[:3]}")
+        except PermissionError as e:
+            self.logger.error(f"Safari history PERMISSION ERROR: {e}")
+            self.logger.error("Full Disk Access may not be granted to Terminal/Python")
         except Exception as e:
             self.logger.error(f"Safari history error: {e}")
             import traceback
@@ -305,6 +314,9 @@ class PayGuardApp(rumps.App):
         urls = []
         try:
             history_path = os.path.expanduser("~/Library/Application Support/Google/Chrome/Default/History")
+            self.logger.info(f"Chrome history path: {history_path}")
+            self.logger.info(f"Chrome history exists: {os.path.exists(history_path)}")
+            
             if os.path.exists(history_path):
                 import sqlite3
                 import tempfile
@@ -313,7 +325,9 @@ class PayGuardApp(rumps.App):
                 # Copy file to avoid lock
                 temp_db = tempfile.NamedTemporaryFile(delete=False)
                 temp_db.close()
+                self.logger.info(f"Copying Chrome history to: {temp_db.name}")
                 shutil.copy2(history_path, temp_db.name)
+                self.logger.info("Chrome history copied successfully")
                 
                 conn = sqlite3.connect(temp_db.name)
                 cursor = conn.cursor()
@@ -322,6 +336,7 @@ class PayGuardApp(rumps.App):
                 chrome_now = (int(time.time()) + 11644473600) * 1000000
                 five_min_ago = chrome_now - (5 * 60 * 1000000)
                 
+                self.logger.info(f"Querying Chrome history since: {five_min_ago}")
                 cursor.execute("""
                     SELECT url FROM urls 
                     WHERE last_visit_time > ?
@@ -331,7 +346,10 @@ class PayGuardApp(rumps.App):
                 urls = [row[0] for row in cursor.fetchall()]
                 conn.close()
                 os.unlink(temp_db.name)
-                self.logger.debug(f"Chrome history query found {len(urls)} URLs")
+                self.logger.info(f"Chrome history query found {len(urls)} URLs: {urls[:3]}")
+        except PermissionError as e:
+            self.logger.error(f"Chrome history PERMISSION ERROR: {e}")
+            self.logger.error("Full Disk Access may not be granted to Terminal/Python")
         except Exception as e:
             self.logger.error(f"Chrome history error: {e}")
             import traceback
