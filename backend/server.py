@@ -237,10 +237,41 @@ async def check_redirects(url: str) -> tuple[str, list[str]]:
     except Exception:
         return url, redirect_chain
 
-def quick_risk_analysis(url: str, check_redirect: bool = False) -> RiskScore:
+async def check_https_support(domain: str) -> tuple[bool, str]:
+    """Actually check if a domain supports HTTPS."""
+    import httpx
+    try:
+        # Try HTTPS first
+        async with httpx.AsyncClient(timeout=5.0, follow_redirects=True) as client:
+            resp = await client.get(f"https://{domain}", headers={"User-Agent": "PayGuard/1.0"})
+            if resp.status_code < 400:
+                return True, f"https://{domain}"
+    except Exception:
+        pass
+    
+    # If HTTPS fails, try HTTP
+    try:
+        async with httpx.AsyncClient(timeout=5.0, follow_redirects=True) as client:
+            resp = await client.get(f"http://{domain}", headers={"User-Agent": "PayGuard/1.0"})
+            if resp.status_code < 400:
+                # Check if it redirected to HTTPS
+                final_url = str(resp.url)
+                if final_url.startswith("https://"):
+                    return True, final_url
+                return False, final_url
+    except Exception:
+        pass
+    
+    return False, f"http://{domain}"
+
+async def quick_risk_analysis(url: str, check_ssl: bool = True) -> RiskScore:
     """Production-ready fast URL analysis - detects phishing patterns reliably."""
     import re
     from urllib.parse import urlparse
+    
+    # Normalize URL - add https:// if no protocol specified
+    if not url.startswith(('http://', 'https://')):
+        url = 'https://' + url
     
     url_lower = url.lower()
     parsed = urlparse(url)
@@ -250,15 +281,17 @@ def quick_risk_analysis(url: str, check_redirect: bool = False) -> RiskScore:
     risk_factors = []
     safety_indicators = []
     score = 70  # Start slightly positive
-    ssl_valid = url.startswith("https://")
     
-    # 1. SSL Check (basic but important)
-    if ssl_valid:
-        safety_indicators.append("Uses HTTPS encryption")
-        score += 5
-    else:
-        risk_factors.append("No HTTPS encryption - data can be intercepted")
-        score -= 20
+    # Actually check if site supports HTTPS
+    ssl_valid = False
+    if check_ssl:
+        ssl_valid, final_url = await check_https_support(domain)
+        if ssl_valid:
+            safety_indicators.append("Site supports HTTPS encryption")
+            score += 5
+        else:
+            risk_factors.append("Site doesn't support HTTPS - connection not encrypted")
+            score -= 15
     
     # 2. Brand Impersonation Detection
     brand_impersonated = None
@@ -416,7 +449,7 @@ async def check_risk(
                     redirect_risk_factors.append(f"🔗 Redirect chain detected ({len(redirect_chain)} hops)")
                     # Check if any redirect in chain is suspicious
                     for redirect_url in redirect_chain[1:]:  # Skip original
-                        redirect_analysis = quick_risk_analysis(redirect_url)
+                        redirect_analysis = await quick_risk_analysis(redirect_url)
                         if redirect_analysis.risk_level == RiskLevel.HIGH:
                             redirect_risk_factors.append(f"Redirects to suspicious site: {redirect_url}")
                             break
@@ -425,7 +458,7 @@ async def check_risk(
         
         # Use quick analysis for demo speed
         if fast:
-            risk_score = quick_risk_analysis(final_url)
+            risk_score = await quick_risk_analysis(final_url)
             # Add redirect information
             if redirect_risk_factors:
                 risk_score.risk_factors = redirect_risk_factors + risk_score.risk_factors
