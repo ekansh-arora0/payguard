@@ -440,7 +440,7 @@ class PayGuardApp(rumps.App):
         self.logger.info("Screen scan started")
         image_data = self._capture_screen()
         if not image_data:
-            rumps.notification("PayGuard", "Error", "Could not capture screen")
+            # Silently fail - no notification
             self.title = ICON_PROTECTED
             return
         
@@ -461,8 +461,7 @@ class PayGuardApp(rumps.App):
             confidence = result.get("confidence", 80)
             reason = result.get("reason", "Suspicious content detected")
             
-            rumps.notification("🚨 THREAT DETECTED", f"Confidence: {confidence}%", reason, sound=True)
-            
+            # Only show popup, no notification
             choice = rumps.alert(
                 title="🚨 PayGuard Security Alert",
                 message=f"{reason}\n\nConfidence: {confidence}%\n\nThis may be a scam. Do NOT call any phone numbers or click any links.",
@@ -475,14 +474,14 @@ class PayGuardApp(rumps.App):
             self.logger.warning(f"THREAT: confidence={confidence}, reason={reason}")
         else:
             self.title = ICON_PROTECTED
-            rumps.notification("✅ Screen Clear", "No threats detected", "")
+            # No notification for safe scans
             self.logger.info("Screen scan: safe")
 
     @rumps.clicked("📋  Scan Clipboard")
     def scan_clipboard(self, _):
         text = self._get_clipboard()
         if not text or len(text.strip()) < 5:
-            rumps.notification("PayGuard", "Clipboard Empty", "Nothing to scan")
+            # Silently skip empty clipboard
             return
         
         result = LocalScamDetector.analyze_text(text)
@@ -497,9 +496,7 @@ class PayGuardApp(rumps.App):
             patterns = result.get("patterns", [])
             confidence = result.get("confidence", 80)
             
-            rumps.notification("🚨 SCAM IN CLIPBOARD", f"Confidence: {confidence}%", 
-                             ", ".join(patterns[:2]) if patterns else "Suspicious", sound=True)
-            
+            # Only popup, no notification
             rumps.alert(
                 title="🚨 Suspicious Content",
                 message=f"Detected:\n• " + "\n• ".join(patterns[:4]) + f"\n\nConfidence: {confidence}%\n\nDO NOT paste or share this!",
@@ -508,7 +505,7 @@ class PayGuardApp(rumps.App):
             self.logger.warning(f"THREAT (clipboard): {patterns}")
         else:
             self.title = ICON_PROTECTED
-            rumps.notification("✅ Clipboard Safe", "No threats detected", "")
+            # No notification for safe clipboard
             self.logger.info("Clipboard scan: safe")
 
     @rumps.clicked("✏️  Scan Text...")
@@ -563,7 +560,7 @@ class PayGuardApp(rumps.App):
         self._check_backend()
         self._update_status()
         msg = "Backend online - AI mode" if self.backend_online else "Backend offline - Local mode"
-        rumps.notification("PayGuard", "Status", msg)
+        # No notification, just update status
         self.logger.info(f"Backend check: {msg}")
 
     @rumps.clicked("🚀  Start Backend Server")
@@ -575,19 +572,18 @@ class PayGuardApp(rumps.App):
                 stdout=subprocess.DEVNULL,
                 stderr=subprocess.DEVNULL
             )
-            rumps.notification("PayGuard", "Starting Backend", "Please wait...")
+            # No notification, just log
             self.logger.info("Backend start requested")
             
             def check_later():
                 time.sleep(5)
                 self._check_backend()
                 self._update_status()
-                if self.backend_online:
-                    rumps.notification("PayGuard", "Backend Ready", "AI protection active")
+                # No notification when backend is ready
             
             threading.Thread(target=check_later, daemon=True).start()
         except Exception as e:
-            rumps.notification("PayGuard", "Error", f"Could not start: {e}")
+            # No notification for error
             self.logger.error(f"Backend start failed: {e}")
 
     @rumps.clicked("ℹ️  About PayGuard")
