@@ -230,25 +230,30 @@ class PayGuardApp(rumps.App):
     def _monitor_browser_history(self):
         """Monitor browser history for suspicious URLs."""
         checked_urls = set()
-        self.logger.info("Browser monitoring started - checking Safari & Chrome")
+        last_safari_url = None
+        last_chrome_url = None
+        self.logger.info("Browser monitoring started - checking Safari & Chrome every 5 seconds")
+        
         while True:
             try:
-                # Check Safari history
+                # Check Safari history - ONLY MOST RECENT
                 safari_history = self._get_safari_history()
-                self.logger.debug(f"Safari history: {len(safari_history)} URLs")
-                for url in safari_history:
-                    if url not in checked_urls:
+                if safari_history:
+                    url = safari_history[0]  # Most recent
+                    if url != last_safari_url and url not in checked_urls:
+                        last_safari_url = url
                         checked_urls.add(url)
-                        self.logger.info(f"New Safari URL: {url[:60]}")
+                        self.logger.info(f"New Safari URL: {url[:80]}")
                         self._check_url(url, source="Safari")
                         
-                # Check Chrome history  
+                # Check Chrome history - ONLY MOST RECENT  
                 chrome_history = self._get_chrome_history()
-                self.logger.debug(f"Chrome history: {len(chrome_history)} URLs")
-                for url in chrome_history:
-                    if url not in checked_urls:
+                if chrome_history:
+                    url = chrome_history[0]  # Most recent
+                    if url != last_chrome_url and url not in checked_urls:
+                        last_chrome_url = url
                         checked_urls.add(url)
-                        self.logger.info(f"New Chrome URL: {url[:60]}")
+                        self.logger.info(f"New Chrome URL: {url[:80]}")
                         self._check_url(url, source="Chrome")
                         
                 # Keep set from growing too large
@@ -257,18 +262,14 @@ class PayGuardApp(rumps.App):
                     
             except Exception as e:
                 self.logger.error(f"Browser monitor error: {e}")
-                import traceback
-                self.logger.error(traceback.format_exc())
                 
             time.sleep(5)  # Check every 5 seconds
             
     def _get_safari_history(self):
-        """Get recent Safari URLs from History.db."""
+        """Get ONLY THE MOST RECENT Safari URL from History.db."""
         urls = []
         try:
             history_path = os.path.expanduser("~/Library/Safari/History.db")
-            self.logger.info(f"Safari history path: {history_path}")
-            self.logger.info(f"Safari history exists: {os.path.exists(history_path)}")
             
             if os.path.exists(history_path):
                 import sqlite3
@@ -278,44 +279,35 @@ class PayGuardApp(rumps.App):
                 # Copy file to avoid lock
                 temp_db = tempfile.NamedTemporaryFile(delete=False, suffix='.db')
                 temp_db.close()
-                self.logger.info(f"Copying Safari history to: {temp_db.name}")
                 shutil.copy2(history_path, temp_db.name)
-                self.logger.info("Safari history copied successfully")
                 
                 conn = sqlite3.connect(temp_db.name)
                 cursor = conn.cursor()
                 # Safari uses Cocoa timestamp (seconds since 2001-01-01)
-                # Convert to proper timestamp
                 safari_now = int(time.time()) - 978307200  # Seconds since 2001
                 five_min_ago = (safari_now - 300) * 1000000  # Convert to microseconds
                 
-                self.logger.info(f"Querying Safari history since: {five_min_ago}")
+                # ONLY GET THE MOST RECENT URL (LIMIT 1)
                 cursor.execute("""
                     SELECT url FROM history_items 
                     WHERE visit_time > ?
                     ORDER BY visit_time DESC 
-                    LIMIT 10
+                    LIMIT 1
                 """, (five_min_ago,))
-                urls = [row[0] for row in cursor.fetchall()]
+                result = cursor.fetchone()
+                if result:
+                    urls = [result[0]]
                 conn.close()
                 os.unlink(temp_db.name)
-                self.logger.info(f"Safari history query found {len(urls)} URLs: {urls[:3]}")
-        except PermissionError as e:
-            self.logger.error(f"Safari history PERMISSION ERROR: {e}")
-            self.logger.error("Full Disk Access may not be granted to Terminal/Python")
         except Exception as e:
-            self.logger.error(f"Safari history error: {e}")
-            import traceback
-            self.logger.error(traceback.format_exc())
+            self.logger.debug(f"Safari history error: {e}")
         return urls
         
     def _get_chrome_history(self):
-        """Get recent Chrome URLs from History."""
+        """Get ONLY THE MOST RECENT Chrome URL from History."""
         urls = []
         try:
             history_path = os.path.expanduser("~/Library/Application Support/Google/Chrome/Default/History")
-            self.logger.info(f"Chrome history path: {history_path}")
-            self.logger.info(f"Chrome history exists: {os.path.exists(history_path)}")
             
             if os.path.exists(history_path):
                 import sqlite3
@@ -325,35 +317,28 @@ class PayGuardApp(rumps.App):
                 # Copy file to avoid lock
                 temp_db = tempfile.NamedTemporaryFile(delete=False)
                 temp_db.close()
-                self.logger.info(f"Copying Chrome history to: {temp_db.name}")
                 shutil.copy2(history_path, temp_db.name)
-                self.logger.info("Chrome history copied successfully")
                 
                 conn = sqlite3.connect(temp_db.name)
                 cursor = conn.cursor()
                 # Chrome uses microseconds since 1601-01-01
-                # Current time in Chrome format
                 chrome_now = (int(time.time()) + 11644473600) * 1000000
                 five_min_ago = chrome_now - (5 * 60 * 1000000)
                 
-                self.logger.info(f"Querying Chrome history since: {five_min_ago}")
+                # ONLY GET THE MOST RECENT URL (LIMIT 1)
                 cursor.execute("""
                     SELECT url FROM urls 
                     WHERE last_visit_time > ?
                     ORDER BY last_visit_time DESC 
-                    LIMIT 10
+                    LIMIT 1
                 """, (five_min_ago,))
-                urls = [row[0] for row in cursor.fetchall()]
+                result = cursor.fetchone()
+                if result:
+                    urls = [result[0]]
                 conn.close()
                 os.unlink(temp_db.name)
-                self.logger.info(f"Chrome history query found {len(urls)} URLs: {urls[:3]}")
-        except PermissionError as e:
-            self.logger.error(f"Chrome history PERMISSION ERROR: {e}")
-            self.logger.error("Full Disk Access may not be granted to Terminal/Python")
         except Exception as e:
-            self.logger.error(f"Chrome history error: {e}")
-            import traceback
-            self.logger.error(traceback.format_exc())
+            self.logger.debug(f"Chrome history error: {e}")
         return urls
         
     def _check_url(self, url, source="browser"):
