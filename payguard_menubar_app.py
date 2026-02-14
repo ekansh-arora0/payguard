@@ -248,7 +248,14 @@ class PayGuardApp(rumps.App):
             history_path = os.path.expanduser("~/Library/Safari/History.db")
             if os.path.exists(history_path):
                 import sqlite3
-                conn = sqlite3.connect(history_path)
+                import tempfile
+                import shutil
+                # Copy file to avoid lock
+                temp_db = tempfile.NamedTemporaryFile(delete=False, suffix='.db')
+                temp_db.close()
+                shutil.copy2(history_path, temp_db.name)
+                
+                conn = sqlite3.connect(temp_db.name)
                 cursor = conn.cursor()
                 # Get URLs from last 5 minutes
                 cursor.execute("""
@@ -259,6 +266,7 @@ class PayGuardApp(rumps.App):
                 """)
                 urls = [row[0] for row in cursor.fetchall()]
                 conn.close()
+                os.unlink(temp_db.name)
         except Exception as e:
             self.logger.debug(f"Safari history error: {e}")
         return urls
