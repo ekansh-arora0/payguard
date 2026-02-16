@@ -366,6 +366,237 @@ async def check_risk(url: str, fast: bool = False):
         "response_time_ms": 20
     }
 
+@app.post("/api/v1/risk")
+async def check_risk_post(payload: dict):
+    """Check URL risk via POST request (for menubar app compatibility)"""
+    url = payload.get("url", "")
+    fast = payload.get("fast", False)
+    
+    # Call the same logic as GET endpoint
+    from urllib.parse import urlparse, unquote
+    
+    parsed = urlparse(url)
+    domain = parsed.netloc.lower()
+    path = unquote(parsed.path.lower())
+    query = unquote(parsed.query.lower())
+    domain_clean = domain.split(':')[0]
+    
+    # Safe domains whitelist
+    safe_domains_exact = {
+        'paypal.com', 'www.paypal.com', 'paypal.me',
+        'amazon.com', 'www.amazon.com', 'smile.amazon.com',
+        'google.com', 'www.google.com', 'accounts.google.com',
+        'facebook.com', 'www.facebook.com',
+        'apple.com', 'www.apple.com', 'icloud.com',
+        'microsoft.com', 'www.microsoft.com', 'login.microsoftonline.com',
+        'netflix.com', 'www.netflix.com',
+        'chase.com', 'www.chase.com', 'secure.chase.com',
+        'wellsfargo.com', 'www.wellsfargo.com',
+        'bankofamerica.com', 'www.bankofamerica.com',
+        'youtube.com', 'www.youtube.com',
+        'twitter.com', 'x.com', 'www.twitter.com',
+        'instagram.com', 'www.instagram.com',
+        'linkedin.com', 'www.linkedin.com',
+        'github.com', 'www.github.com',
+        'reddit.com', 'www.reddit.com',
+        'dropbox.com', 'www.dropbox.com',
+        'spotify.com', 'www.spotify.com',
+        'uber.com', 'www.uber.com',
+        'airbnb.com', 'www.airbnb.com',
+    }
+    
+    if domain_clean in safe_domains_exact:
+        return {
+            "url": url,
+            "domain": domain,
+            "risk_score": 0,
+            "risk_level": "LOW",
+            "risk_factors": [],
+            "trust_score": 100,
+            "checks_performed": ["domain_whitelist"],
+            "response_time_ms": 5
+        }
+    
+    for safe in safe_domains_exact:
+        if domain_clean.endswith('.' + safe) or domain_clean == safe:
+            return {
+                "url": url,
+                "domain": domain,
+                "risk_score": 0,
+                "risk_level": "LOW",
+                "risk_factors": [],
+                "trust_score": 100,
+                "checks_performed": ["domain_whitelist"],
+                "response_time_ms": 5
+            }
+    
+    # Initialize risk tracking
+    risk_score = 0
+    risk_factors = []
+    
+    # Pattern 1: Random-looking subdomains (auto-generated scam domains)
+    subdomain_parts = domain_clean.split('.')
+    for part in subdomain_parts[:-2]:  # Check subdomains, not TLD
+        # Check for long random strings (mix of letters and numbers, 10+ chars) - HIGH risk
+        if len(part) >= 10 and re.search(r'[a-z].*[0-9]|[0-9].*[a-z]', part):
+            risk_score += 50
+            risk_factors.append({"code": "random_subdomain", "description": f"Random-looking subdomain: {part[:20]}...", "weight": 50})
+            break
+        # Check for shorter random strings (5-9 chars) - MEDIUM risk
+        elif len(part) >= 5 and re.search(r'[a-z].*[0-9]|[0-9].*[a-z]', part):
+            risk_score += 25
+            risk_factors.append({"code": "suspicious_subdomain", "description": f"Suspicious subdomain pattern: {part}", "weight": 25})
+            break
+    
+    # Pattern 1b: Random-looking main domain names (like caish-djc, achel-xof)
+    # Check if main domain (before TLD) looks auto-generated with hyphens and random chars
+    if len(subdomain_parts) >= 2:
+        main_domain = subdomain_parts[-2]  # e.g., "caish-djc" from "caish-djc.com"
+        # Check for hyphenated random domains: caish-djc, bef25-sayasdf patterns
+        if '-' in main_domain and len(main_domain) >= 8:
+            parts = main_domain.split('-')
+            # Check if parts look random (short, mixed alphanumeric)
+            random_parts = [p for p in parts if len(p) >= 4 and (re.search(r'[0-9]', p) or len(p) <= 6)]
+            if len(random_parts) >= 2 or (len(random_parts) == 1 and len(parts) == 2):
+                risk_score += 30
+                risk_factors.append({"code": "random_domain", "description": f"Auto-generated domain name: {main_domain}", "weight": 30})
+    
+    # Pattern 2: Suspicious redirect paths (zclkredirect, clk, redirect)
+    redirect_paths = ['zclkredirect', 'clkredirect', 'redirect', 'rd', 'jump', 'goto', 'out', 'exit']
+    for redirect_path in redirect_paths:
+        if redirect_path in path.lower():
+            risk_score += 35
+            risk_factors.append({"code": "redirect_path", "description": f"Redirect path detected: /{redirect_path}", "weight": 35})
+            break
+    
+    # Pattern 3: Tracking parameters (click IDs, visit IDs, session tracking)
+    tracking_params = re.findall(r'(cid|clickid|extclickid|visitid|s|u|d|k|dtcbu|tsid|cs_fpid|cj)=[a-zA-Z0-9_-]{8,}', query)
+    if len(tracking_params) >= 3:
+        risk_score += 35
+        risk_factors.append({"code": "heavy_tracking", "description": f"Heavy tracking parameters ({len(tracking_params)} found)", "weight": 35})
+    elif len(tracking_params) >= 1:
+        risk_score += 15
+        risk_factors.append({"code": "tracking_params", "description": f"Tracking parameters detected", "weight": 15})
+    
+    # Pattern 4: Suspicious country-code TLDs often used for scams
+    # .co.in (India commercial), .xyz, .top, .click, .link
+    if re.search(r'\.(co\.in|xyz|top|click|link|date|gdn|men|science|country|download)$', domain_clean):
+        risk_score += 35
+        risk_factors.append({"code": "suspicious_tld", "description": "High-risk TLD commonly used for scams", "weight": 35})
+    
+    # Pattern 5: Typosquatting (brand impersonation with subtle changes)
+    typosquatting_patterns = [
+        (r'paypa[l1][^l]|payp[a4]l|p[a4]ypal|pay-pal', 90, "paypal_typo", "PayPal typo-squatting"),
+        (r'ama[z2][o0]n|amaz[o0]n|amaz[o0]-|arnazon', 85, "amazon_typo", "Amazon typo-squatting"),
+        (r'metam[a4]sk|metamask-|meta-mas[k1]', 90, "metamask_typo", "MetaMask typo-squatting"),
+        (r'c[o0]inb[a4]se|coinb[a4]se|coin-base', 90, "coinbase_typo", "Coinbase typo-squatting"),
+        (r'g[o0]{2,}gle|g[o0]{2}gle|g[o0]gle-', 85, "google_typo", "Google typo-squatting"),
+        (r'app1e|appl[e3]|icloud-|apple-', 85, "apple_typo", "Apple typo-squatting"),
+        (r'faceb[o0]{2,}k|faceb[o0]k|facebook-', 85, "facebook_typo", "Facebook typo-squatting"),
+        (r'netf1ix|netfl[ix1]|netflix-', 80, "netflix_typo", "Netflix typo-squatting"),
+    ]
+    
+    for pattern, weight, code, description in typosquatting_patterns:
+        if re.search(pattern, domain_clean):
+            risk_score += weight
+            risk_factors.append({"code": code, "description": description, "weight": weight})
+    
+    # Pattern 6: Redirect chain indicators
+    # Look for redirect patterns in query parameters
+    redirect_params = re.findall(r'(redirect|url|return|next|to|target|destination|ch|js)=', query)
+    if len(redirect_params) >= 2:
+        risk_score += 35
+        risk_factors.append({"code": "redirect_chain", "description": f"Multiple redirect parameters detected ({len(redirect_params)})", "weight": 35})
+    
+    # Pattern 7: Free TLDs (.tk, .ml, .ga, .cf, .gq)
+    if re.search(r'\.(tk|ml|ga|cf|gq)$', domain_clean):
+        risk_score += 45
+        risk_factors.append({"code": "free_tld", "description": "Free domain TLD commonly abused by scammers", "weight": 45})
+    
+    # Pattern 8: IP addresses instead of domains
+    if re.match(r'^\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}', domain_clean):
+        risk_score += 85
+        risk_factors.append({"code": "ip_address", "description": "Uses IP address instead of domain name", "weight": 85})
+    
+    # Pattern 9: URL shorteners that hide destination
+    if re.search(r'^(bit\.ly|tinyurl|t\.co|ow\.ly|buff\.ly|is\.gd|cli\.gs|short\.link)', domain_clean):
+        risk_score += 50
+        risk_factors.append({"code": "url_shortener", "description": "URL shortener hides final destination", "weight": 50})
+    
+    # Pattern 10: Excessive subdomains (more than 3 levels)
+    if len(subdomain_parts) > 4:
+        risk_score += 25
+        risk_factors.append({"code": "many_subdomains", "description": f"Excessive subdomains ({len(subdomain_parts)} levels)", "weight": 25})
+    
+    # Pattern 11: Credential harvesting paths
+    credential_paths = ['/login', '/signin', '/verify', '/confirm', '/account', '/password', '/secure']
+    for cred_path in credential_paths:
+        if cred_path in path:
+            risk_score += 20
+            risk_factors.append({"code": "credential_path", "description": f"Credential harvesting path detected: {cred_path}", "weight": 20})
+            break
+    
+    # Pattern 12: Crypto/Wallet scams
+    crypto_patterns = [
+        (r'wallet.*connect|wallet.*sync|wallet.*verify', 80, "wallet_scam", "Fake wallet connection"),
+        (r'crypto.*claim|crypto.*verify|crypto.*restore', 75, "crypto_scam", "Crypto scam pattern"),
+        (r'trust.*wallet|trustwallet', 80, "trustwallet_scam", "TrustWallet scam"),
+        (r'binance|binance-.*|binance.*verify', 85, "binance_typo", "Binance impersonation"),
+    ]
+    
+    for pattern, weight, code, description in crypto_patterns:
+        if re.search(pattern, domain_clean + path):
+            risk_score += weight
+            risk_factors.append({"code": code, "description": description, "weight": weight})
+    
+    # Pattern 13: Suspicious keywords in domain
+    scam_keywords = [
+        (r'(urgent|immediate|act.?now|limited.?time|expires?.?soon)', 25, "urgency", "Urgency keywords"),
+        (r'(prize|winner|won|selected|congratulations|free.*gift)', 25, "lottery", "Lottery/prize scam"),
+        (r'(verify|confirm|update|secure).{0,20}(account|identity)', 25, "verify", "Verification request"),
+        (r'((suspended|blocked|restricted).{0,15}(account|access))', 30, "suspended", "Account threat"),
+    ]
+    
+    for pattern, weight, code, description in scam_keywords:
+        if re.search(pattern, domain_clean + path + query):
+            risk_score += weight
+            risk_factors.append({"code": code, "description": description, "weight": weight})
+    
+    # Remove duplicate risk factors
+    seen_codes = set()
+    unique_factors = []
+    for factor in risk_factors:
+        if factor['code'] not in seen_codes:
+            seen_codes.add(factor['code'])
+            unique_factors.append(factor)
+    risk_factors = unique_factors
+    
+    # Cap at 100
+    risk_score = min(risk_score, 100)
+    
+    # Determine risk level - BE MORE AGGRESSIVE
+    if risk_score >= 70:
+        risk_level = "CRITICAL"
+    elif risk_score >= 40:
+        risk_level = "HIGH"
+    elif risk_score >= 20:
+        risk_level = "MEDIUM"
+    elif risk_score >= 5:
+        risk_level = "LOW"
+    else:
+        risk_level = "MINIMAL"
+    
+    return {
+        "url": url,
+        "domain": domain,
+        "risk_score": risk_score,
+        "risk_level": risk_level,
+        "risk_factors": risk_factors,
+        "trust_score": max(0, 100 - risk_score),
+        "checks_performed": ["comprehensive_check"],
+        "response_time_ms": 15
+    }
+
 @app.post("/api/media-risk/bytes")
 async def analyze_media(payload: dict):
     """Simple scam detection"""

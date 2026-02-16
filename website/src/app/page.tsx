@@ -13,54 +13,133 @@ import Link from 'next/link'
 
 const API_BASE = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8002'
 
-// Demo mode analysis for when server is unavailable
-const getDemoAnalysis = (url: string) => {
-  const suspiciousKeywords = ['login', 'verify', 'secure', 'account', 'update', 'confirm', 'paypal', 'apple', 'microsoft']
-  const hasSuspiciousKeyword = suspiciousKeywords.some(kw => url.toLowerCase().includes(kw))
-  const hasIP = /\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}/.test(url)
-  const hasHttp = url.startsWith('http:')
-  
-  let score = 75
+// Demo mode analysis - aggressive detection like backend
+const getDemoAnalysis = (url: string): { trust_score: number; risk_level: 'LOW' | 'MEDIUM' | 'HIGH' | 'CRITICAL'; risk_factors: string[]; safety_indicators: string[] } => {
+  const lowerUrl = url.toLowerCase()
   const factors = []
-  const indicators = ['Valid URL structure detected']
+  let riskScore = 0
   
-  if (hasSuspiciousKeyword) {
-    score -= 15
-    factors.push('URL contains common phishing keywords')
-  }
-  if (hasIP) {
-    score -= 25
-    factors.push('URL uses IP address instead of domain name')
-  }
-  if (hasHttp) {
-    score -= 10
-    factors.push('Connection is not encrypted (HTTP)')
-    indicators.push('Recommend using HTTPS for secure connections')
-  } else {
-    indicators.push('Secure HTTPS connection detected')
+  // Safe domains whitelist
+  const safeDomains = ['google.com', 'github.com', 'apple.com', 'microsoft.com', 'amazon.com', 'paypal.com']
+  if (safeDomains.some(d => lowerUrl.includes(d))) {
+    return {
+      trust_score: 100,
+      risk_level: 'LOW',
+      risk_factors: [],
+      safety_indicators: ['Domain is in whitelist', 'Known safe domain']
+    }
   }
   
-  if (url.includes('github.com') || url.includes('google.com') || url.includes('apple.com')) {
-    score = Math.min(95, score + 20)
-    indicators.push('Domain has strong reputation')
+  // Pattern 1: Typosquatting detection
+  const typosquattingPatterns = [
+    { pattern: /paypa[l1][^l]|payp[a4]l|p[a4]ypal/, weight: 90, desc: 'PayPal typo-squatting detected' },
+    { pattern: /amaz[o0]n|amaz[o0]-|arnazon/, weight: 85, desc: 'Amazon typo-squatting detected' },
+    { pattern: /g[o0]{2,}gle|g[o0]gle-/, weight: 85, desc: 'Google typo-squatting detected' },
+    { pattern: /app1e|appl[e3]|apple-/, weight: 85, desc: 'Apple typo-squatting detected' },
+    { pattern: /metam[a4]sk|metamask-|meta-mas[k1]/, weight: 90, desc: 'MetaMask typo-squatting detected' },
+    { pattern: /c[o0]inb[a4]se|coinb[a4]se/, weight: 90, desc: 'Coinbase typo-squatting detected' },
+    { pattern: /netf1ix|netfl[ix1]|netflix-/, weight: 80, desc: 'Netflix typo-squatting detected' },
+  ]
+  
+  for (const { pattern, weight, desc } of typosquattingPatterns) {
+    if (pattern.test(lowerUrl)) {
+      riskScore += weight
+      factors.push(desc)
+    }
   }
   
+  // Pattern 2: Random-looking subdomains (10+ chars with mix of letters/numbers)
+  const subdomainMatch = lowerUrl.match(/\/\/([a-z0-9]{10,})\./)
+  if (subdomainMatch && /[a-z].*[0-9]|[0-9].*[a-z]/.test(subdomainMatch[1])) {
+    riskScore += 50
+    factors.push('Random-looking subdomain (auto-generated scam domain)')
+  }
+  
+  // Pattern 3: Suspicious TLDs
+  if (/\.(tk|ml|ga|cf|gq|xyz|top|click|link|co\.in)$/.test(lowerUrl)) {
+    riskScore += 35
+    factors.push('High-risk TLD commonly used for scams')
+  }
+  
+  // Pattern 4: IP addresses
+  if (/\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}/.test(url)) {
+    riskScore += 85
+    factors.push('Uses IP address instead of domain name')
+  }
+  
+  // Pattern 5: URL shorteners
+  if (/^(https?:\/\/)?(bit\.ly|tinyurl|t\.co|ow\.ly)/.test(lowerUrl)) {
+    riskScore += 50
+    factors.push('URL shortener hides final destination')
+  }
+  
+  // Pattern 6: Tracking parameters
+  const trackingParams = (lowerUrl.match(/(cid|clickid|extclickid)=[a-z0-9]{10,}/g) || []).length
+  if (trackingParams >= 2) {
+    riskScore += 40
+    factors.push(`Multiple suspicious tracking parameters (${trackingParams} found)`)
+  } else if (trackingParams === 1) {
+    riskScore += 20
+    factors.push('Suspicious tracking parameter found')
+  }
+  
+  // Pattern 7: Redirect chain indicators
+  const redirectParams = (lowerUrl.match(/(redirect|url|return|next|to|target|destination|ch|js)=/g) || []).length
+  if (redirectParams >= 2) {
+    riskScore += 35
+    factors.push(`Multiple redirect parameters detected (${redirectParams})`)
+  }
+  
+  // Pattern 8: Credential harvesting paths
+  if (/\/(login|signin|verify|confirm|secure)/.test(lowerUrl)) {
+    riskScore += 20
+    factors.push('Credential harvesting path detected')
+  }
+  
+  // Pattern 9: Suspicious keywords
+  const suspiciousKeywords = [
+    { pattern: /urgent|immediate|act.?now/, weight: 25, desc: 'Urgency keywords (pressure tactics)' },
+    { pattern: /prize|winner|won|congratulations/, weight: 25, desc: 'Lottery/prize scam keywords' },
+    { pattern: /verify.*account|confirm.*identity/, weight: 25, desc: 'Verification request pattern' },
+    { pattern: /wallet.*connect|crypto.*verify/, weight: 80, desc: 'Crypto wallet scam pattern' },
+  ]
+  
+  for (const { pattern, weight, desc } of suspiciousKeywords) {
+    if (pattern.test(lowerUrl)) {
+      riskScore += weight
+      factors.push(desc)
+    }
+  }
+  
+  // Pattern 10: Excessive subdomains
+  const subdomainCount = (lowerUrl.match(/\./g) || []).length
+  if (subdomainCount > 3) {
+    riskScore += 25
+    factors.push(`Excessive subdomains (${subdomainCount + 1} levels)`)
+  }
+  
+  // Cap at 100
+  riskScore = Math.min(riskScore, 100)
+  
+  // Determine risk level - BE AGGRESSIVE
   let level: 'LOW' | 'MEDIUM' | 'HIGH' | 'CRITICAL'
-  if (score >= 75) {
-    level = 'LOW'
-  } else if (score >= 50) {
-    level = 'MEDIUM'
-  } else if (score >= 25) {
-    level = 'HIGH'
-  } else {
+  if (riskScore >= 70) {
     level = 'CRITICAL'
+  } else if (riskScore >= 40) {
+    level = 'HIGH'
+  } else if (riskScore >= 20) {
+    level = 'MEDIUM'
+  } else {
+    level = 'LOW'
   }
+  
+  const trustScore = Math.max(0, 100 - riskScore)
   
   return {
-    trust_score: Math.max(0, Math.min(100, score)),
-    risk_level: level,
+    trust_score: trustScore,
+    risk_level: level as 'LOW' | 'MEDIUM' | 'HIGH' | 'CRITICAL',
     risk_factors: factors.length > 0 ? factors : ['No significant risk factors detected'],
-    safety_indicators: indicators
+    safety_indicators: trustScore > 80 ? ['Domain appears legitimate', 'No suspicious patterns detected'] : ['Caution advised']
   }
 }
 
@@ -225,7 +304,7 @@ export default function Home() {
   const [demoResult, setDemoResult] = useState<null | {
     url: string
     score: number
-    level: 'LOW' | 'MEDIUM' | 'HIGH' | 'CRITICAL'
+    level: 'LOW' | 'MEDIUM' | 'HIGH' | 'CRITICAL' | 'MINIMAL'
     factors: string[]
     indicators: string[]
     response_time: number

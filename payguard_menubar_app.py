@@ -155,6 +155,13 @@ class PayGuardApp(rumps.App):
         self.last_alert_time = 0  # Track last popup to prevent spam
         self.alert_cooldown = 30  # Seconds between alerts
         
+        # Performance optimizations
+        self.url_cache = {}  # Cache URL results: {url: (timestamp, result)}
+        self.cache_ttl = 300  # 5 minutes cache TTL
+        self.last_checked_url = None  # Track last URL to avoid re-checking
+        self.request_session = requests.Session() if HAS_REQUESTS else None  # Reuse connections
+        self.check_interval = 5  # Start with 5s, increase when idle
+        
         self.menu = [
             rumps.MenuItem("PayGuard", callback=None),
             rumps.MenuItem("Status: Initializing...", callback=None),
@@ -333,30 +340,52 @@ class PayGuardApp(rumps.App):
         return urls
         
     def _check_url(self, url, source="browser"):
-        """Check a URL for threats."""
+        """Check a URL for threats with caching and optimizations."""
         try:
             if not self.backend_online:
-                self.logger.warning("Backend offline, cannot check URL")
                 return
-                
-            # Skip common safe domains
+            
+            # Skip if same as last checked URL
+            if url == self.last_checked_url:
+                return
+            self.last_checked_url = url
+            
+            # Check cache first
+            current_time = time.time()
+            if url in self.url_cache:
+                cache_time, cached_result = self.url_cache[url]
+                if current_time - cache_time < self.cache_ttl:
+                    # Use cached result
+                    if cached_result.get('risk_level') in ['HIGH', 'MEDIUM', 'CRITICAL']:
+                        self._show_url_threat_alert(url, cached_result)
+                    return
+            
+            # Quick whitelist check (faster than API call)
             safe_domains = ['google.com', 'youtube.com', 'facebook.com', 'twitter.com', 
                           'apple.com', 'microsoft.com', 'github.com', 'stackoverflow.com',
-                          'reddit.com', 'amazon.com', 'netflix.com', 'icloud.com']
-            if any(domain in url.lower() for domain in safe_domains):
-                self.logger.info(f"Skipping safe domain: {url[:60]}")
+                          'reddit.com', 'amazon.com', 'netflix.com', 'icloud.com',
+                          'linkedin.com', 'instagram.com', 'yahoo.com', 'bing.com']
+            domain = url.lower().split('/')[2] if '//' in url else url.lower()
+            if any(safe in domain for safe in safe_domains):
                 return
-                
-            self.logger.info(f"🔍 CHECKING {source} URL: {url}")
             
-            # Check with backend
-            self.logger.info("Calling backend API...")
-            resp = requests.post(
-                f"{BACKEND_URL}/api/v1/risk?fast=true",
-                headers={"Content-Type": "application/json", "X-API-Key": "demo_key"},
-                json={"url": url},
-                timeout=3
-            )
+            self.logger.info(f"🔍 CHECKING {source} URL: {url[:80]}")
+            
+            # Use session for connection reuse
+            if self.request_session:
+                resp = self.request_session.post(
+                    f"{BACKEND_URL}/api/v1/risk?fast=true",
+                    headers={"Content-Type": "application/json", "X-API-Key": "demo_key"},
+                    json={"url": url},
+                    timeout=2
+                )
+            else:
+                resp = requests.post(
+                    f"{BACKEND_URL}/api/v1/risk?fast=true",
+                    headers={"Content-Type": "application/json", "X-API-Key": "demo_key"},
+                    json={"url": url},
+                    timeout=2
+                )
             
             self.logger.info(f"Backend response status: {resp.status_code}")
             
@@ -364,19 +393,19 @@ class PayGuardApp(rumps.App):
                 data = resp.json()
                 risk_level = data.get("risk_level", "unknown")
                 trust_score = data.get("trust_score", 0)
-                self.logger.info(f"Risk Level: {risk_level}, Score: {trust_score}")
                 
-                # Show alert for HIGH or MEDIUM risk
-                if risk_level.lower() in ["high", "medium"]:
-                    self.logger.info(f"🚨 {risk_level.upper()} RISK DETECTED - SHOWING ALERT")
+                # Cache the result
+                self.url_cache[url] = (time.time(), data)
+                
+                # Show alert for HIGH, MEDIUM, or CRITICAL risk
+                if risk_level.lower() in ["high", "medium", "critical"]:
+                    self.logger.info(f"🚨 {risk_level.upper()} RISK DETECTED")
                     self._show_url_threat_alert(url, data)
                     self.threats_detected += 1
-                    self.scans_performed += 1
-                    self.last_scan_time = datetime.now()
-                else:
-                    self.logger.info(f"Risk level is {risk_level}, not showing alert")
+                self.scans_performed += 1
+                self.last_scan_time = datetime.now()
             else:
-                self.logger.error(f"Backend returned error: {resp.status_code}")
+                self.logger.error(f"Backend error: {resp.status_code}")
                     
         except Exception as e:
             self.logger.error(f"URL check error: {e}")
