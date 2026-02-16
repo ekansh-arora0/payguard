@@ -254,7 +254,7 @@ class PayGuardApp(rumps.App):
             except Exception as e:
                 self.logger.debug(f"Browser monitor error: {e}")  # Debug level
                 
-            time.sleep(2)  # Check every 2 seconds
+            time.sleep(5)  # Check every 5 seconds - better for performance
             
     def _get_safari_history(self):
         """Get ONLY THE MOST RECENT Safari URL from History.db."""

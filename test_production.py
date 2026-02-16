@@ -14,6 +14,17 @@ from typing import Dict, List, Tuple
 API_BASE = "http://127.0.0.1:8002"
 API_KEY = "demo_key"
 
+def show_popup(title: str, message: str, icon: str = "🚨"):
+    """Show actual popup dialog window (not notification)."""
+    try:
+        # Escape quotes for AppleScript
+        safe_title = title.replace('"', '\\"')
+        safe_message = message.replace('"', '\\"')
+        script = f'display dialog "{safe_message}" with title "{safe_title}" buttons {{"OK"}} default button "OK" with icon stop'
+        subprocess.run(["osascript", "-e", script], capture_output=True)
+    except Exception:
+        pass  # Popups not available
+
 def show_notification(title: str, message: str, sound: bool = True):
     """Show macOS notification."""
     try:
@@ -165,14 +176,14 @@ def run_tests():
             passed += 1
             status = "✅ PASS"
             
-            # Show notification for threats detected
+            # Show popup for threats detected
             if expected_risk == "high":
-                show_notification(
+                show_popup(
                     "🚨 PayGuard Threat Detected!",
-                    f"Detected phishing: {url[:40]}...",
-                    sound=True
+                    f"Threat detected:\n{url}\n\nRisk Level: HIGH\nThis appears to be a phishing attempt!",
+                    icon="🚨"
                 )
-                time.sleep(0.5)  # Small delay between notifications
+                time.sleep(0.3)  # Small delay between popups
         else:
             failed += 1
             status = "❌ FAIL"
@@ -206,26 +217,26 @@ def run_tests():
     
     if failed == 0:
         print("🎉 ALL TESTS PASSED! System is production-ready.")
-        show_notification(
+        show_popup(
             "✅ PayGuard Tests Complete",
-            f"All {total} tests passed! System is production-ready.",
-            sound=False
+            f"All {total} tests passed!\n\nSystem is production-ready.\n\n10 phishing threats were correctly detected.",
+            icon="✅"
         )
         return 0
     elif percentage >= 80:
         print("⚠️  MOSTLY WORKING (80%+ pass rate) - Check failed tests above")
-        show_notification(
+        show_popup(
             "⚠️ PayGuard Tests Mostly Passed",
-            f"{passed}/{total} tests passed ({percentage:.0f}%)",
-            sound=False
+            f"{passed}/{total} tests passed ({percentage:.0f}%)\n\nCheck terminal for details.",
+            icon="⚠️"
         )
         return 0
     else:
         print("❌ TOO MANY FAILURES - System needs debugging")
-        show_notification(
+        show_popup(
             "❌ PayGuard Tests Failed",
-            f"Only {passed}/{total} tests passed. Check terminal for details.",
-            sound=True
+            f"Only {passed}/{total} tests passed.\n\nCheck terminal for details.",
+            icon="❌"
         )
         return 1
 

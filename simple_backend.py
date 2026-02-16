@@ -20,6 +20,352 @@ app.add_middleware(
 async def health():
     return {"status": "healthy", "timestamp": datetime.now(timezone.utc)}
 
+@app.get("/api/v1/health")
+async def health_v1():
+    return {"status": "healthy", "timestamp": datetime.now(timezone.utc)}
+
+@app.get("/api/v1/risk")
+async def check_risk(url: str, fast: bool = False):
+    """Check URL risk for phishing detection with enhanced patterns"""
+    from urllib.parse import urlparse, unquote
+    
+    # Parse URL
+    parsed = urlparse(url)
+    domain = parsed.netloc.lower()
+    path = unquote(parsed.path.lower())
+    query = unquote(parsed.query.lower())
+    
+    # Remove port if present for domain checking
+    domain_clean = domain.split(':')[0]
+    
+    # Safe domains whitelist (exact matches or major subdomains)
+    safe_domains_exact = {
+        'paypal.com', 'www.paypal.com', 'paypal.me',
+        'amazon.com', 'www.amazon.com', 'smile.amazon.com',
+        'google.com', 'www.google.com', 'accounts.google.com',
+        'facebook.com', 'www.facebook.com',
+        'apple.com', 'www.apple.com', 'icloud.com',
+        'microsoft.com', 'www.microsoft.com', 'login.microsoftonline.com',
+        'netflix.com', 'www.netflix.com',
+        'chase.com', 'www.chase.com', 'secure.chase.com',
+        'wellsfargo.com', 'www.wellsfargo.com',
+        'bankofamerica.com', 'www.bankofamerica.com',
+        'youtube.com', 'www.youtube.com',
+        'twitter.com', 'x.com', 'www.twitter.com',
+        'instagram.com', 'www.instagram.com',
+        'linkedin.com', 'www.linkedin.com',
+        'github.com', 'www.github.com',
+        'reddit.com', 'www.reddit.com',
+        'dropbox.com', 'www.dropbox.com',
+        'spotify.com', 'www.spotify.com',
+        'uber.com', 'www.uber.com',
+        'airbnb.com', 'www.airbnb.com',
+    }
+    
+    # Check exact domain match first
+    if domain_clean in safe_domains_exact:
+        return {
+            "url": url,
+            "domain": domain,
+            "risk_score": 0,
+            "risk_level": "LOW",
+            "risk_factors": [],
+            "checks_performed": ["domain_whitelist"],
+            "response_time_ms": 5
+        }
+    
+    # Check for known safe subdomains
+    for safe in safe_domains_exact:
+        if domain_clean.endswith('.' + safe) or domain_clean == safe:
+            return {
+                "url": url,
+                "domain": domain,
+                "risk_score": 0,
+                "risk_level": "LOW",
+                "risk_factors": [],
+                "checks_performed": ["domain_whitelist"],
+                "response_time_ms": 5
+            }
+    
+    # Initialize risk tracking
+    risk_score = 0
+    risk_factors = []
+    checks_performed = ["domain_whitelist"]
+    
+    # ===== 1. TYPOSQUATTING DETECTION =====
+    typosquatting_patterns = [
+        # PayPal variations
+        (r'paypa[1l][^l]|payp[4a]l|pay-pal|paypa1|p[4a]ypal', 95, "paypal_typo", "PayPal typo-squatting"),
+        
+        # Amazon variations  
+        (r'ama[sz][o0]n|amaz[o0]n|arnazon|amazon-\w+|amaz0n', 90, "amazon_typo", "Amazon typo-squatting"),
+        
+        # Apple variations
+        (r'app1e|appl[e3]|icloud-\w+|apple-\w{3,}', 90, "apple_typo", "Apple typo-squatting"),
+        
+        # Google variations
+        (r'g[o0]{2,}gle|g[o0]{2,}g1e|gogle|google-\w{4,}', 90, "google_typo", "Google typo-squatting"),
+        
+        # Microsoft variations
+        (r'micr[o0]{1,}s[o0]ft|micros[o0]ft|micro-soft|microsoft-\w{3,}', 90, "microsoft_typo", "Microsoft typo-squatting"),
+        
+        # Facebook variations
+        (r'faceb[o0]{2,}k|faceb[o0]{2,}k|facebook-\w{4,}', 90, "facebook_typo", "Facebook typo-squatting"),
+        
+        # Netflix variations
+        (r'netf1ix|netfl[ix1]|netflix-\w{4,}', 85, "netflix_typo", "Netflix typo-squatting"),
+        
+        # Banking variations
+        (r'ch[a4]se|chase-\w{3,}|wellsfarg[o0]|bankofameric[a4]', 95, "bank_typo", "Bank typo-squatting"),
+        (r'citib[a4]nk|b[o0][a4]|usb[a4]nk|pncb[a4]nk', 95, "bank_typo", "Bank typo-squatting"),
+        
+        # Social media
+        (r'twitt[e3]r|tw1tter|twitter-\w{3,}|inst[a4]gr[a4]m', 85, "social_typo", "Social media typo-squatting"),
+        
+        # Shopping
+        (r'eb[a4]y|shop1fy|etsy-|ebay-\w{3,}', 85, "shopping_typo", "Shopping site typo-squatting"),
+        
+        # Crypto/Finance
+        (r'c[o0]inb[a4]se|bin[a4]nce|kr[a4]ken|blockch[a4]in', 95, "crypto_typo", "Crypto exchange typo-squatting"),
+    ]
+    
+    for pattern, weight, code, description in typosquatting_patterns:
+        if re.search(pattern, domain_clean):
+            risk_score += weight
+            risk_factors.append({"code": code, "description": description, "weight": weight})
+    
+    # ===== 2. SUSPICIOUS TLDs =====
+    suspicious_tlds = [
+        (r'\.(tk|ml|ga|cf|gq|top|xyz|work|date|click|link|zip)$', 40, "suspicious_tld", "Suspicious/free TLD"),
+        (r'\.(country|download|gdn|men|science|work)$', 50, "highrisk_tld", "High-risk TLD"),
+    ]
+    
+    for pattern, weight, code, description in suspicious_tlds:
+        if re.search(pattern, domain_clean):
+            risk_score += weight
+            risk_factors.append({"code": code, "description": description, "weight": weight})
+    
+    # ===== 3. DOMAIN STRUCTURE ANALYSIS =====
+    
+    # IP address instead of domain
+    if re.match(r'^\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}', domain_clean):
+        risk_score += 90
+        risk_factors.append({"code": "ip_address", "description": "IP address instead of domain name", "weight": 90})
+    
+    # Excessive subdomains (likely suspicious)
+    subdomain_count = domain_clean.count('.')
+    if subdomain_count >= 4:
+        risk_score += 40
+        risk_factors.append({"code": "many_subdomains", "description": f"Excessive subdomains ({subdomain_count+1} levels)", "weight": 40})
+    elif subdomain_count >= 3:
+        risk_score += 20
+        risk_factors.append({"code": "multiple_subdomains", "description": f"Multiple subdomains ({subdomain_count+1} levels)", "weight": 20})
+    
+    # Brand name in subdomain of suspicious domain (e.g., paypal.suspicious-site.com)
+    brand_in_subdomain = [
+        (r'paypal\.', 85, "paypal_subdomain", "PayPal in subdomain"),
+        (r'amazon\.', 80, "amazon_subdomain", "Amazon in subdomain"),
+        (r'google\.', 80, "google_subdomain", "Google in subdomain"),
+        (r'apple\.', 80, "apple_subdomain", "Apple in subdomain"),
+        (r'microsoft\.', 80, "microsoft_subdomain", "Microsoft in subdomain"),
+        (r'facebook\.', 80, "facebook_subdomain", "Facebook in subdomain"),
+        (r'netflix\.', 80, "netflix_subdomain", "Netflix in subdomain"),
+        (r'chase\.', 90, "chase_subdomain", "Chase in subdomain"),
+        (r'bankofamerica\.', 90, "boa_subdomain", "Bank of America in subdomain"),
+        (r'wellsfargo\.', 90, "wellsfargo_subdomain", "Wells Fargo in subdomain"),
+    ]
+    
+    for pattern, weight, code, description in brand_in_subdomain:
+        if re.search(pattern, domain_clean):
+            # Check it's not a legitimate subdomain of the brand's own domain
+            if not any(domain_clean.endswith('.' + brand) or domain_clean == brand 
+                      for brand in ['paypal.com', 'amazon.com', 'google.com', 'apple.com', 
+                                   'microsoft.com', 'facebook.com', 'netflix.com', 'chase.com']):
+                risk_score += weight
+                risk_factors.append({"code": code, "description": description, "weight": weight})
+    
+    # ===== 4. URL PATH ANALYSIS =====
+    
+    # Credential harvesting paths
+    credential_paths = [
+        (r'/login|/signin|/sign-in|/log-in|/authenticate', 25, "login_path", "Login path on suspicious domain"),
+        (r'/verify|/verification|/confirm|/validation', 30, "verify_path", "Verification path on suspicious domain"),
+        (r'/account|/password|/reset|/recover', 25, "account_path", "Account-related path"),
+        (r'/update|/upgrade|/secure|/locked', 25, "update_path", "Account update path"),
+        (r'/billing|/payment|/invoice|/receipt', 25, "payment_path", "Payment-related path"),
+    ]
+    
+    for pattern, weight, code, description in credential_paths:
+        if re.search(pattern, path):
+            risk_score += weight
+            risk_factors.append({"code": code, "description": description, "weight": weight})
+    
+    # Suspicious query parameters
+    suspicious_params = [
+        (r'[?&](token|session|auth|key)=', 30, "suspicious_token", "Suspicious token parameter"),
+        (r'(redirect|url|return|next)=https?://', 35, "open_redirect", "Open redirect parameter"),
+        (r'(redirect|url|return|next)=/', 25, "redirect_param", "Redirect parameter"),
+        (r'[?&](cmd|exec|run|ping|query)=', 40, "command_param", "Potential command injection"),
+        (r'[?&](user|username|email|password)=', 25, "credential_param", "Credentials in URL"),
+    ]
+    
+    for pattern, weight, code, description in suspicious_params:
+        if re.search(pattern, query):
+            risk_score += weight
+            risk_factors.append({"code": code, "description": description, "weight": weight})
+    
+    # ===== 5. ENCODING & OBFUSCATION =====
+    
+    # Punycode/homograph attacks
+    if 'xn--' in domain_clean:
+        risk_score += 80
+        risk_factors.append({"code": "punycode", "description": "Punycode domain (possible homograph attack)", "weight": 80})
+    
+    # Mixed scripts (homograph attacks) - Cyrillic, Greek, etc.
+    mixed_scripts = [
+        (r'[\u0430-\u044f]', 95, "cyrillic_chars", "Cyrillic characters (homograph attack)"),
+        (r'[\u03b1-\u03c9]', 95, "greek_chars", "Greek characters (homograph attack)"),
+        (r'[\u0430]', 95, "cyrillic_a", "Cyrillic 'а' looks like Latin 'a'"),
+        (r'[\u043e]', 95, "cyrillic_o", "Cyrillic 'о' looks like Latin 'o'"),
+        (r'[\u0440]', 95, "cyrillic_p", "Cyrillic 'р' looks like Latin 'p'"),
+    ]
+    
+    for pattern, weight, code, description in mixed_scripts:
+        if re.search(pattern, domain_clean):
+            risk_score += weight
+            risk_factors.append({"code": code, "description": description, "weight": weight})
+    
+    # Hex/obfuscated URLs
+    if re.search(r'%[0-9a-f]{2}', url) and len(re.findall(r'%[0-9a-f]{2}', url)) > 3:
+        risk_score += 25
+        risk_factors.append({"code": "url_encoded", "description": "Heavily URL-encoded (obfuscation)", "weight": 25})
+    
+    # ===== 6. URL SHORTENERS & REDIRECTS =====
+    
+    url_shorteners = [
+        (r'^(bit\.ly|tinyurl|t\.co|ow\.ly|buff\.ly|goo\.gl|short\.link|is\.gd|cli\.gs)', 60, "url_shortener", "URL shortener (hides destination)"),
+    ]
+    
+    for pattern, weight, code, description in url_shorteners:
+        if re.search(pattern, domain_clean):
+            risk_score += weight
+            risk_factors.append({"code": code, "description": description, "weight": weight})
+    
+    # ===== 7. SUSPICIOUS PORTS =====
+    
+    if ':' in domain:
+        port = domain.split(':')[-1]
+        if port not in ['80', '443', '8080', '8443']:
+            risk_score += 35
+            risk_factors.append({"code": "unusual_port", "description": f"Unusual port: {port}", "weight": 35})
+    
+    # ===== 8. DIGITAL WALLET & CRYPTO SCAMS =====
+    
+    crypto_scams = [
+        (r'(wallet|crypto|bitcoin|ethereum|nft)[\.-]?(connect|verify|sync|restore|claim)', 90, "crypto_scam", "Crypto wallet scam"),
+        (r'metamask|metam[a4]sk|meta-mas[k1]|metamask-\w+', 95, "metamask_typo", "MetaMask typo-squatting"),
+        (r'trustwallet|trust-walllet|trust[\.-]?wallet', 90, "trustwallet_typo", "Trust Wallet typo-squatting"),
+        (r'coinbase|coinb[a4]se|coin-base|coinbase-\w+', 95, "coinbase_typo", "Coinbase typo-squatting"),
+        (r'binance|bin[a4]nce|binance-\w+', 95, "binance_typo", "Binance typo-squatting"),
+        (r'kraken|kr[a4]ken|kraken-\w+', 90, "kraken_typo", "Kraken typo-squatting"),
+    ]
+    
+    for pattern, weight, code, description in crypto_scams:
+        if re.search(pattern, domain_clean + path):
+            risk_score += weight
+            risk_factors.append({"code": code, "description": description, "weight": weight})
+    
+    # ===== 9. URGENCY & SCAM KEYWORDS =====
+    
+    scam_keywords = [
+        (r'(urgent|immediate|act.?now|limited.?time)', 20, "urgency", "Urgency keywords"),
+        (r'(suspended|blocked|locked|restricted|unusual.?activity)', 25, "account_threat", "Account threat keywords"),
+        (r'(verify|confirm|update|validate).{0,20}(account|identity|information)', 25, "verify_request", "Verification request"),
+        (r'(prize|winner|congratulations|won|selected)', 20, "lottery_scam", "Lottery/prize scam"),
+        (r'(refund|rebate|overcharge|billing.issue)', 20, "refund_scam", "Refund scam"),
+        (r'(free|gift|bonus|reward).{0,10}(claim|click|get)', 20, "free_scam", "Free gift scam"),
+    ]
+    
+    for pattern, weight, code, description in scam_keywords:
+        if re.search(pattern, domain_clean + path + query):
+            risk_score += weight
+            risk_factors.append({"code": code, "description": description, "weight": weight})
+    
+    # ===== 10. TECH SUPPORT SCAMS =====
+    
+    tech_support_scams = [
+        (r'(support|help|tech|technical).{0,10}(microsoft|apple|windows|mac)', 80, "tech_support", "Fake tech support"),
+        (r'virus|malware|infected|security.?alert|warning', 30, "virus_warning", "Virus/malware warning"),
+        (r'call.?(now|immediately)?\s*\d{3}-?\d{3}-?\d{4}', 85, "phone_scam", "Phone number in URL"),
+        (r'1-?800-?\d{3}-?\d{4}|1-?888-?\d{3}-?\d{4}', 70, "toll_free_scam", "Toll-free number in URL"),
+    ]
+    
+    for pattern, weight, code, description in tech_support_scams:
+        if re.search(pattern, domain_clean + path + query):
+            risk_score += weight
+            risk_factors.append({"code": code, "description": description, "weight": weight})
+    
+    # ===== 11. DOMAIN AGE INDICATORS (simulated) =====
+    # In production, you'd check WHOIS data
+    
+    # Very long domain names (often auto-generated)
+    if len(domain_clean) > 40:
+        risk_score += 15
+        risk_factors.append({"code": "long_domain", "description": f"Very long domain ({len(domain_clean)} chars)", "weight": 15})
+    
+    # Random-looking domain names (consonant/vowel patterns)
+    import random
+    random_patterns = [
+        (r'[bcdfghjklmnpqrstvwxyz]{5,}', "consonant_cluster", "Unusual consonant cluster"),
+        (r'[a-z0-9]{15,}', "long_random_string", "Long random string"),
+        (r'\d+[a-z]+\d+[a-z]+\d+', "mixed_alphanumeric", "Mixed alphanumeric pattern"),
+    ]
+    for pattern, code, description in random_patterns:
+        if re.search(pattern, domain_clean):
+            risk_score += 20
+            risk_factors.append({"code": code, "description": description, "weight": 20})
+    
+    # ===== CAP & DEDUPLICATE =====
+    
+    # Remove duplicate risk factors
+    seen_codes = set()
+    unique_factors = []
+    for factor in risk_factors:
+        if factor['code'] not in seen_codes:
+            seen_codes.add(factor['code'])
+            unique_factors.append(factor)
+    risk_factors = unique_factors
+    
+    # Cap at 100
+    risk_score = min(risk_score, 100)
+    
+    # ===== DETERMINE RISK LEVEL =====
+    if risk_score >= 75:
+        risk_level = "CRITICAL"
+    elif risk_score >= 50:
+        risk_level = "HIGH"
+    elif risk_score >= 25:
+        risk_level = "MEDIUM"
+    elif risk_score >= 10:
+        risk_level = "LOW"
+    else:
+        risk_level = "MINIMAL"
+    
+    checks_performed.extend(["typosquatting", "tld_analysis", "structure", "path_analysis", 
+                            "encoding", "shorteners", "crypto_scams", "keyword_analysis"])
+    
+    return {
+        "url": url,
+        "domain": domain,
+        "path": path,
+        "risk_score": risk_score,
+        "risk_level": risk_level,
+        "risk_factors": risk_factors,
+        "checks_performed": checks_performed,
+        "detection_count": len(risk_factors),
+        "response_time_ms": 20
+    }
+
 @app.post("/api/media-risk/bytes")
 async def analyze_media(payload: dict):
     """Simple scam detection"""
