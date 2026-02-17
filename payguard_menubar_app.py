@@ -138,7 +138,7 @@ class LocalScamDetector:
             orange_ratio = orange_count / total if total > 0 else 0
             
             # Red warning screen (classic virus alert)
-            if red_ratio > 0.15:
+            if red_ratio > 0.05:
                 confidence = min(75 + int(red_ratio * 50), 98)
                 return {
                     "is_scam": True,
@@ -147,7 +147,7 @@ class LocalScamDetector:
                 }
             
             # Blue screen (tech support scam)
-            if blue_ratio > 0.20:
+            if blue_ratio > 0.10:
                 confidence = min(60 + int(blue_ratio * 40), 95)
                 return {
                     "is_scam": True,
@@ -156,7 +156,7 @@ class LocalScamDetector:
                 }
             
             # Orange warning
-            if orange_ratio > 0.15:
+            if orange_ratio > 0.08:
                 confidence = min(50 + int(orange_ratio * 40), 90)
                 return {
                     "is_scam": True,
@@ -401,7 +401,8 @@ class PayGuardApp(rumps.App):
                           'reddit.com', 'amazon.com', 'netflix.com', 'icloud.com',
                           'linkedin.com', 'instagram.com', 'yahoo.com', 'bing.com',
                           'pearson.com', 'pearsoned.com', 'fcps.edu', 'k12.com',
-                          'vercel.app', 'netlify.app', 'opencode.ai', 'canvas.instructure.com']
+                          'vercel.app', 'netlify.app', 'opencode.ai', 'canvas.instructure.com',
+                          'localhost', '127.0.0.1', '0.0.0.0']
             domain = url.lower().split('/')[2] if '//' in url else url.lower()
             if any(safe in domain for safe in safe_domains):
                 return
