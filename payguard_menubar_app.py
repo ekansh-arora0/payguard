@@ -588,25 +588,45 @@ class PayGuardApp(rumps.App):
             confidence = result.get("confidence", 80)
             reason = result.get("reason", "Suspicious content detected")
             
-            # Show popup for threats
-            choice = rumps.alert(
-                title="🚨 PayGuard Security Alert",
-                message=f"{reason}\n\nConfidence: {confidence}%\n\nThis may be a scam. Do NOT call any phone numbers or click any links.",
-                ok="I Understand",
-                cancel="Get Help"
-            )
-            if choice == 0:
-                subprocess.run(["open", "https://consumer.ftc.gov/features/scam-alerts"], capture_output=True)
+            # Show popup for threats - use osascript for reliability
+            try:
+                script = f'''display dialog "🚨 PAYGUARD SECURITY ALERT
+
+{reason}
+
+Confidence: {confidence}%
+
+This may be a scam. Do NOT call any phone numbers or click any links." with title "PayGuard Alert" buttons {{"I Understand", "Get Help"}} default button "I Understand"'''
+                result = subprocess.run(["osascript", "-e", script], capture_output=True, timeout=10)
+                if "Get Help" in result.stderr.decode():
+                    subprocess.run(["open", "https://consumer.ftc.gov/features/scam-alerts"], capture_output=True)
+            except:
+                choice = rumps.alert(
+                    title="🚨 PayGuard Security Alert",
+                    message=f"{reason}\n\nConfidence: {confidence}%\n\nThis may be a scam. Do NOT call any phone numbers or click any links.",
+                    ok="I Understand",
+                    cancel="Get Help"
+                )
+                if choice == 0:
+                    subprocess.run(["open", "https://consumer.ftc.gov/features/scam-alerts"], capture_output=True)
             
             self.logger.warning(f"THREAT: confidence={confidence}, reason={reason}")
         else:
             self.title = ICON_PROTECTED
-            # ALWAYS show popup for safe scans too
-            rumps.alert(
-                title="✅ PayGuard Scan Complete",
-                message="Screen scan complete.\n\nNo threats detected.\n\nYour screen appears safe.",
-                ok="Great!"
-            )
+            # ALWAYS show popup for safe scans too - use osascript for reliability
+            try:
+                script = '''display dialog "✅ PayGuard Scan Complete
+
+Screen scan complete.
+No threats detected.
+Your screen appears safe." with title "PayGuard" buttons {"Great!"} default button "Great!"'''
+                subprocess.run(["osascript", "-e", script], capture_output=True, timeout=10)
+            except:
+                rumps.alert(
+                    title="✅ PayGuard Scan Complete",
+                    message="Screen scan complete.\n\nNo threats detected.\n\nYour screen appears safe.",
+                    ok="Great!"
+                )
             self.logger.info("Screen scan: safe")
 
     @rumps.clicked("📋  Scan Clipboard")
