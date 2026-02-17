@@ -588,7 +588,7 @@ class PayGuardApp(rumps.App):
             confidence = result.get("confidence", 80)
             reason = result.get("reason", "Suspicious content detected")
             
-            # Only show popup, no notification
+            # Show popup for threats
             choice = rumps.alert(
                 title="🚨 PayGuard Security Alert",
                 message=f"{reason}\n\nConfidence: {confidence}%\n\nThis may be a scam. Do NOT call any phone numbers or click any links.",
@@ -601,7 +601,12 @@ class PayGuardApp(rumps.App):
             self.logger.warning(f"THREAT: confidence={confidence}, reason={reason}")
         else:
             self.title = ICON_PROTECTED
-            # No notification for safe scans
+            # ALWAYS show popup for safe scans too
+            rumps.alert(
+                title="✅ PayGuard Scan Complete",
+                message="Screen scan complete.\n\nNo threats detected.\n\nYour screen appears safe.",
+                ok="Great!"
+            )
             self.logger.info("Screen scan: safe")
 
     @rumps.clicked("📋  Scan Clipboard")
