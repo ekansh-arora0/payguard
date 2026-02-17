@@ -59,16 +59,18 @@ class PayGuardComprehensiveTestRunner:
         logger.info("🔍 Checking test dependencies...")
         
         required_packages = [
-            'pytest', 'pytest-asyncio', 'pytest-cov', 'aiohttp',
-            'hypothesis', 'psutil', 'pillow'
+            'pytest', 'pytest_asyncio', 'pytest_cov', 'aiohttp',
+            'hypothesis', 'psutil', 'PIL'
         ]
         
         missing_packages = []
         for package in required_packages:
             try:
-                __import__(package.replace('-', '_'))
+                __import__(package)
             except ImportError:
-                missing_packages.append(package)
+                # Map PIL back to pillow for error message
+                display_name = 'pillow' if package == 'PIL' else package.replace('_', '-')
+                missing_packages.append(display_name)
         
         if missing_packages:
             logger.error(f"❌ Missing packages: {', '.join(missing_packages)}")
