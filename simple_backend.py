@@ -229,17 +229,37 @@ async def check_risk(url: str, fast: bool = False, follow_redirects: bool = True
     
     # ===== 4. URL PATH ANALYSIS =====
     
-    # Credential harvesting paths
-    credential_paths = [
-        (r'/login|/signin|/sign-in|/log-in|/authenticate', 25, "login_path", "Login path on suspicious domain"),
-        (r'/verify|/verification|/confirm|/validation', 30, "verify_path", "Verification path on suspicious domain"),
-        (r'/account|/password|/reset|/recover', 25, "account_path", "Account-related path"),
-        (r'/update|/upgrade|/secure|/locked', 25, "update_path", "Account update path"),
-        (r'/billing|/payment|/invoice|/receipt', 25, "payment_path", "Payment-related path"),
+    # Credential harvesting paths - must be exact path segments, not partial matches
+    # Split path by / to get individual segments for exact matching
+    path_segments = [seg.lower() for seg in path.split('/') if seg]
+    
+    credential_patterns = [
+        # (exact_segment_match, weight, code, description)
+        ('login', 25, "login_path", "Login path on suspicious domain"),
+        ('signin', 25, "login_path", "Login path on suspicious domain"),
+        ('sign-in', 25, "login_path", "Login path on suspicious domain"),
+        ('log-in', 25, "login_path", "Login path on suspicious domain"),
+        ('authenticate', 25, "login_path", "Login path on suspicious domain"),
+        ('verify', 30, "verify_path", "Verification path on suspicious domain"),
+        ('verification', 30, "verify_path", "Verification path on suspicious domain"),
+        ('confirm', 30, "verify_path", "Verification path on suspicious domain"),
+        ('validation', 30, "verify_path", "Verification path on suspicious domain"),
+        ('account', 25, "account_path", "Account-related path"),
+        ('password', 25, "account_path", "Account-related path"),
+        ('reset', 25, "account_path", "Account-related path"),
+        ('recover', 25, "account_path", "Account-related path"),
+        ('update', 25, "update_path", "Account update path"),
+        ('upgrade', 25, "update_path", "Account update path"),
+        ('secure', 25, "update_path", "Account update path"),
+        ('locked', 25, "update_path", "Account update path"),
+        ('billing', 25, "payment_path", "Payment-related path"),
+        ('payment', 25, "payment_path", "Payment-related path"),
+        ('invoice', 25, "payment_path", "Payment-related path"),
+        ('receipt', 25, "payment_path", "Payment-related path"),
     ]
     
-    for pattern, weight, code, description in credential_paths:
-        if re.search(pattern, path):
+    for segment, weight, code, description in credential_patterns:
+        if segment in path_segments:
             risk_score += weight
             risk_factors.append({"code": code, "description": description, "weight": weight})
     
@@ -585,12 +605,13 @@ async def check_risk_post(payload: dict):
         risk_score += 25
         risk_factors.append({"code": "many_subdomains", "description": f"Excessive subdomains ({len(subdomain_parts)} levels)", "weight": 25})
     
-    # Pattern 11: Credential harvesting paths
-    credential_paths = ['/login', '/signin', '/verify', '/confirm', '/account', '/password', '/secure']
-    for cred_path in credential_paths:
-        if cred_path in path:
+    # Pattern 11: Credential harvesting paths - exact segment matching only
+    path_segments = [seg.lower() for seg in path.split('/') if seg]
+    credential_segments = ['login', 'signin', 'verify', 'confirm', 'account', 'password', 'secure']
+    for cred_segment in credential_segments:
+        if cred_segment in path_segments:
             risk_score += 20
-            risk_factors.append({"code": "credential_path", "description": f"Credential harvesting path detected: {cred_path}", "weight": 20})
+            risk_factors.append({"code": "credential_path", "description": f"Credential harvesting path detected: /{cred_segment}", "weight": 20})
             break
     
     # Pattern 12: Crypto/Wallet scams
