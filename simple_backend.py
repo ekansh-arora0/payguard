@@ -88,6 +88,14 @@ async def check_risk(url: str, fast: bool = False, follow_redirects: bool = True
         'spotify.com', 'www.spotify.com',
         'uber.com', 'www.uber.com',
         'airbnb.com', 'www.airbnb.com',
+        # Educational
+        'pearson.com', 'pearsoned.com', 'k12.com', 'fcps.edu',
+        'canvas.instructure.com', 'blackboard.com', 'moodle.org',
+        'mhc.edu', 'edu',
+        # Common platforms
+        'opencode.ai', 'vercel.app', 'netlify.app', 'cloudflare.com',
+        'shopify.com', 'stripe.com', 'zoom.us', 'dropbox.com',
+        'slack.com', 'teams.microsoft.com', 'discord.com',
     }
     
     # Check exact domain match first
@@ -531,6 +539,13 @@ async def check_risk_post(payload: dict):
         'spotify.com', 'www.spotify.com',
         'uber.com', 'www.uber.com',
         'airbnb.com', 'www.airbnb.com',
+        # Educational
+        'pearson.com', 'pearsoned.com', 'k12.com', 'fcps.edu',
+        'canvas.instructure.com', 'blackboard.com', 'moodle.org',
+        # Common platforms
+        'opencode.ai', 'vercel.app', 'netlify.app', 'cloudflare.com',
+        'shopify.com', 'stripe.com', 'zoom.us',
+        'slack.com', 'teams.microsoft.com', 'discord.com',
     }
     
     if domain_clean in safe_domains_exact:

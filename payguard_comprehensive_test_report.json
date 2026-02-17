@@ -1,0 +1,55 @@
+{
+  "timestamp": 1771287288.33995,
+  "total_duration": 101.78629612922668,
+  "overall_success": false,
+  "summary": {
+    "total_test_suites": 3,
+    "total_tests": 26,
+    "passed": 23,
+    "failed": 3,
+    "skipped": 0,
+    "errors": 0,
+    "success_rate": 88.46153846153845
+  },
+  "test_suites": [
+    {
+      "name": "Unit Tests",
+      "success": false,
+      "duration": 7.523977994918823,
+      "test_count": 23,
+      "passed": 23,
+      "failed": 0,
+      "skipped": 0,
+      "errors": 0,
+      "success_rate": 100.0
+    },
+    {
+      "name": "Code Quality",
+      "success": false,
+      "duration": 91.95318865776062,
+      "test_count": 2,
+      "passed": 0,
+      "failed": 2,
+      "skipped": 0,
+      "errors": 0,
+      "success_rate": 0.0
+    },
+    {
+      "name": "Security",
+      "success": false,
+      "duration": 0.6280069351196289,
+      "test_count": 1,
+      "passed": 0,
+      "failed": 1,
+      "skipped": 0,
+      "errors": 0,
+      "success_rate": 0.0
+    }
+  ],
+  "environment": {
+    "python_version": "3.13.7",
+    "platform": "darwin",
+    "working_directory": "/Users/ekans/payguard",
+    "backend_available": true
+  }
+}

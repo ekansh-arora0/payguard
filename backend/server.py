@@ -357,11 +357,16 @@ async def quick_risk_analysis(url: str, check_ssl: bool = True) -> RiskScore:
         "google.com", "github.com", "apple.com", "microsoft.com", "amazon.com",
         "paypal.com", "facebook.com", "twitter.com", "x.com", "linkedin.com",
         "youtube.com", "reddit.com", "stackoverflow.com", "wikipedia.org",
+        # Educational
+        "pearson.com", "pearsoned.com", "fcps.edu", "k12.edu", "edu",
+        # Common platforms
+        "opencode.ai", "vercel.app", "netlify.app", "cloudflare.com",
+        "shopify.com", "stripe.com", "zoom.us", "dropbox.com",
     ]
     for trusted in trusted_domains:
-        if trusted in domain_lower and domain_lower.count('.') <= trusted.count('.'):
-            score = min(100, score + 30)
-            safety_indicators.append(f"Verified legitimate domain")
+        if trusted in domain_lower and domain_lower.count('.') <= trusted.count('.') + 1:
+            score = min(100, score + 50)  # Stronger boost for whitelisted domains
+            safety_indicators.append(f"Verified legitimate domain ({trusted})")
             break
     
     # 8. URL Length Check
