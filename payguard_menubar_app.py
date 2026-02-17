@@ -611,8 +611,15 @@ class PayGuardApp(rumps.App):
         result = None
         if self.backend_online:
             result = self._scan_with_backend(image_data)
-        if result is None:
-            result = LocalScamDetector.analyze_image(image_data)
+        
+        # Also run local detector as backup - combine results
+        local_result = LocalScamDetector.analyze_image(image_data)
+        if local_result.get("is_scam"):
+            # Local detector found something - use that result
+            result = local_result
+        elif result is None:
+            # Backend failed, use local result
+            result = local_result
         
         self.scans_performed += 1
         self.last_scan_time = datetime.now()
