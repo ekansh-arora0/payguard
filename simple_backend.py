@@ -562,6 +562,9 @@ async def check_risk_post(payload: dict):
     risk_score = 0
     risk_factors = []
     
+    # Parse path into segments for pattern matching
+    path_segments = [seg.lower() for seg in path.split('/') if seg]
+    
     # Pattern 1: Random-looking subdomains (auto-generated scam domains)
     subdomain_parts = domain_clean.split('.')
     for part in subdomain_parts[:-2]:  # Check subdomains, not TLD
@@ -600,12 +603,12 @@ async def check_risk_post(payload: dict):
             risk_score += 30
             risk_factors.append({"code": code, "description": description, "weight": 30})
     
-    # Pattern 2: Suspicious redirect paths (zclkredirect, clk, redirect)
-    redirect_paths = ['zclkredirect', 'clkredirect', 'redirect', 'rd', 'jump', 'goto', 'out', 'exit']
-    for redirect_path in redirect_paths:
-        if redirect_path in path.lower():
+    # Pattern 2: Suspicious redirect paths - must be exact path segments
+    redirect_segments = ['zclkredirect', 'clkredirect', 'redirect', 'rd', 'jump', 'goto', 'out', 'exit']
+    for redirect_seg in redirect_segments:
+        if redirect_seg in path_segments:
             risk_score += 35
-            risk_factors.append({"code": "redirect_path", "description": f"Redirect path detected: /{redirect_path}", "weight": 35})
+            risk_factors.append({"code": "redirect_path", "description": f"Redirect path detected: /{redirect_seg}", "weight": 35})
             break
     
     # Pattern 3: Tracking parameters (click IDs, visit IDs, session tracking)
