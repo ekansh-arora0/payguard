@@ -120,6 +120,10 @@ async def check_risk(url: str, fast: bool = False, follow_redirects: bool = True
     risk_factors = []
     checks_performed = ["domain_whitelist"]
     
+    # Report redirect chain if redirects were followed
+    if follow_redirects and len(redirect_chain) > 1:
+        risk_factors.append({"code": "redirect_chain", "description": f"🔗 Redirect chain detected ({len(redirect_chain)} hops: {' -> '.join([u[:30] + '...' if len(u) > 30 else u for u in redirect_chain])}", "weight": 10})
+    
     # ===== 1. TYPOSQUATTING DETECTION =====
     typosquatting_patterns = [
         # PayPal variations
@@ -211,19 +215,6 @@ async def check_risk(url: str, fast: bool = False, follow_redirects: bool = True
                                    'microsoft.com', 'facebook.com', 'netflix.com', 'chase.com']):
                 risk_score += weight
                 risk_factors.append({"code": code, "description": description, "weight": weight})
-    
-    # ===== SUSPICIOUS REDIRECT DOMAINS =====
-    # Domains commonly used for redirects to scams
-    suspicious_redirect_domains = [
-        (r'quandaledingle', 70, "meme_redirect_domain", "Known redirect domain (meme/pop culture site that redirects to scams)"),
-        (r'ww[0-9]+\.', 40, "parked_domain", "Parked domain with ww prefix"),
-        (r'^[0-9]{5,}\.', 50, "numeric_subdomain", "Numeric subdomain (often parked/redirect)"),
-    ]
-    
-    for pattern, weight, code, description in suspicious_redirect_domains:
-        if re.search(pattern, domain_clean):
-            risk_score += weight
-            risk_factors.append({"code": code, "description": description, "weight": weight})
     
     # Suspicious redirect parameters (JavaScript redirect tracking)
     redirect_tracking_params = [
@@ -615,19 +606,7 @@ async def check_risk_post(payload: dict):
             risk_score += weight
             risk_factors.append({"code": code, "description": description, "weight": weight})
     
-    # Pattern 12b: Suspicious redirect domains (meme/pop culture sites that redirect to scams)
-    suspicious_redirect_domains = [
-        (r'quandaledingle', 70, "meme_redirect_domain", "Known redirect domain (meme/pop culture site that redirects to scams)"),
-        (r'ww[0-9]+\.', 40, "parked_domain", "Parked domain with ww prefix"),
-        (r'^[0-9]{5,}\.', 50, "numeric_subdomain", "Numeric subdomain (often parked/redirect)"),
-    ]
-    
-    for pattern, weight, code, description in suspicious_redirect_domains:
-        if re.search(pattern, domain_clean):
-            risk_score += weight
-            risk_factors.append({"code": code, "description": description, "weight": weight})
-    
-    # Pattern 12c: Redirect tracking parameters (common in scam chains)
+    # Pattern 12b: Redirect tracking parameters (common in scam chains)
     redirect_tracking_params = [
         (r'[?&](ch|js|sid|session|token)=[a-zA-Z0-9_-]{10,}', 35, "redirect_tracking", "Redirect tracking parameters (common in scam chains)"),
         (r'[?&](redirect|url|to|goto|target)=https?://', 40, "external_redirect", "External redirect parameter"),
