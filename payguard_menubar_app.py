@@ -340,7 +340,7 @@ class PayGuardApp(rumps.App):
         return urls
         
     def _check_url(self, url, source="browser"):
-        """Check a URL for threats with caching and optimizations."""
+        """Check a URL for threats with caching, URL analysis, and optional HTML analysis."""
         try:
             if not self.backend_online:
                 return
@@ -364,14 +364,16 @@ class PayGuardApp(rumps.App):
             safe_domains = ['google.com', 'youtube.com', 'facebook.com', 'twitter.com', 
                           'apple.com', 'microsoft.com', 'github.com', 'stackoverflow.com',
                           'reddit.com', 'amazon.com', 'netflix.com', 'icloud.com',
-                          'linkedin.com', 'instagram.com', 'yahoo.com', 'bing.com']
+                          'linkedin.com', 'instagram.com', 'yahoo.com', 'bing.com',
+                          'pearson.com', 'pearsoned.com', 'fcps.edu', 'k12.com',
+                          'vercel.app', 'netlify.app', 'opencode.ai', 'canvas.instructure.com']
             domain = url.lower().split('/')[2] if '//' in url else url.lower()
             if any(safe in domain for safe in safe_domains):
                 return
             
             self.logger.info(f"🔍 CHECKING {source} URL: {url[:80]}")
             
-            # Use session for connection reuse
+            # First: Quick URL-only check
             if self.request_session:
                 resp = self.request_session.post(
                     f"{BACKEND_URL}/api/v1/risk?fast=true",
@@ -393,6 +395,46 @@ class PayGuardApp(rumps.App):
                 data = resp.json()
                 risk_level = data.get("risk_level", "unknown")
                 trust_score = data.get("trust_score", 0)
+                
+                # If clearly safe or clearly dangerous, use that result
+                # Otherwise, do HTML analysis for more accurate detection
+                should_analyze_html = False
+                
+                if trust_score >= 70:
+                    # Clearly safe - no need for HTML analysis
+                    self.logger.info(f"✅ URL is clearly safe ({trust_score}% trust) - skipping HTML analysis")
+                    self.url_cache[url] = (time.time(), data)
+                    return
+                elif trust_score <= 30:
+                    # Clearly dangerous - alert immediately
+                    self.logger.info(f"🚨 URL is clearly dangerous ({trust_score}% trust) - skipping HTML analysis")
+                else:
+                    # Doubtful case (30% < trust < 70%) - do HTML analysis for better detection
+                    self.logger.info(f"⚠️ URL is uncertain ({trust_score}% trust) - doing HTML analysis...")
+                    should_analyze_html = True
+                
+                # If we need HTML analysis, make a second call
+                if should_analyze_html:
+                    if self.request_session:
+                        resp2 = self.request_session.post(
+                            f"{BACKEND_URL}/api/v1/risk?fast=false",
+                            headers={"Content-Type": "application/json", "X-API-Key": "demo_key"},
+                            json={"url": url},
+                            timeout=10
+                        )
+                    else:
+                        resp2 = requests.post(
+                            f"{BACKEND_URL}/api/v1/risk?fast=false",
+                            headers={"Content-Type": "application/json", "X-API-Key": "demo_key"},
+                            json={"url": url},
+                            timeout=10
+                        )
+                    
+                    if resp2.status_code == 200:
+                        data = resp2.json()
+                        risk_level = data.get("risk_level", "unknown")
+                        trust_score = data.get("trust_score", 0)
+                        self.logger.info(f"📄 HTML analysis result: {risk_level} ({trust_score}% trust)")
                 
                 # Cache the result
                 self.url_cache[url] = (time.time(), data)
