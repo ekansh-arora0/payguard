@@ -116,12 +116,28 @@ class LocalScamDetector:
                 return {"is_scam": False, "confidence": 0}
             
             total = sum(count for count, _ in colors)
+            
+            # Count different danger colors
             red_count = sum(
                 count for count, (r, g, b) in colors
                 if r > 180 and g < 80 and b < 80
             )
-            red_ratio = red_count / total if total > 0 else 0
+            # Blue screen (tech support scams)
+            blue_count = sum(
+                count for count, (r, g, b) in colors
+                if b > 150 and r < 100 and g < 150
+            )
+            # Orange/yellow (warnings)
+            orange_count = sum(
+                count for count, (r, g, b) in colors
+                if r > 200 and g > 100 and g < 220 and b < 100
+            )
             
+            red_ratio = red_count / total if total > 0 else 0
+            blue_ratio = blue_count / total if total > 0 else 0
+            orange_ratio = orange_count / total if total > 0 else 0
+            
+            # Red warning screen (classic virus alert)
             if red_ratio > 0.15:
                 confidence = min(75 + int(red_ratio * 50), 98)
                 return {
@@ -129,6 +145,25 @@ class LocalScamDetector:
                     "confidence": confidence,
                     "reason": "Red warning screen detected - likely fake security alert",
                 }
+            
+            # Blue screen (tech support scam)
+            if blue_ratio > 0.20:
+                confidence = min(60 + int(blue_ratio * 40), 95)
+                return {
+                    "is_scam": True,
+                    "confidence": confidence,
+                    "reason": "Blue tech support screen detected - common scam pattern",
+                }
+            
+            # Orange warning
+            if orange_ratio > 0.15:
+                confidence = min(50 + int(orange_ratio * 40), 90)
+                return {
+                    "is_scam": True,
+                    "confidence": confidence,
+                    "reason": "Warning color detected - possible scam",
+                }
+                
         except Exception:
             pass
         
