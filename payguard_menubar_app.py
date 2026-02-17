@@ -103,7 +103,7 @@ class LocalScamDetector:
         }
 
     @classmethod
-    def analyze_image(cls, image_data):
+    def analyze_image(cls, image_data, logger=None):
         if not HAS_PIL or not image_data:
             return {"is_scam": False, "confidence": 0}
         
@@ -132,6 +132,14 @@ class LocalScamDetector:
                 count for count, (r, g, b) in colors
                 if r > 200 and g > 100 and g < 220 and b < 100
             )
+            
+            red_ratio = red_count / total if total > 0 else 0
+            blue_ratio = blue_count / total if total > 0 else 0
+            orange_ratio = orange_count / total if total > 0 else 0
+            
+            # Debug logging
+            if logger:
+                logger.debug(f"Screen colors: red={red_ratio:.1%}, blue={blue_ratio:.1%}, orange={orange_ratio:.1%}")
             
             red_ratio = red_count / total if total > 0 else 0
             blue_ratio = blue_count / total if total > 0 else 0
@@ -613,7 +621,7 @@ class PayGuardApp(rumps.App):
             result = self._scan_with_backend(image_data)
         
         # Also run local detector as backup - combine results
-        local_result = LocalScamDetector.analyze_image(image_data)
+        local_result = LocalScamDetector.analyze_image(image_data, self.logger)
         if local_result.get("is_scam"):
             # Local detector found something - use that result
             result = local_result
