@@ -376,17 +376,68 @@ async def check_risk(url: str, fast: bool = False, follow_redirects: bool = True
         risk_score += 15
         risk_factors.append({"code": "long_domain", "description": f"Very long domain ({len(domain_clean)} chars)", "weight": 15})
     
-    # Random-looking domain names (consonant/vowel patterns)
-    import random
-    random_patterns = [
-        (r'[bcdfghjklmnpqrstvwxyz]{5,}', "consonant_cluster", "Unusual consonant cluster"),
-        (r'[a-z0-9]{15,}', "long_random_string", "Long random string"),
-        (r'\d+[a-z]+\d+[a-z]+\d+', "mixed_alphanumeric", "Mixed alphanumeric pattern"),
+    # Auto-generated/random-looking domain names (high confidence indicators only)
+    # Only flag if domain has multiple suspicious characteristics
+    random_indicators = 0
+    
+    # Pattern 1: All consonants or all vowels (not normal words)
+    if re.search(r'^[bcdfghjklmnpqrstvwxyz]{6,}$', domain_clean.split('.')[0]):
+        random_indicators += 1
+    
+    # Pattern 2: Excessive numbers in domain
+    digit_count = len(re.findall(r'\d', domain_clean))
+    if digit_count >= 4:
+        random_indicators += 1
+    
+    # Pattern 3: High entropy/random-looking (mixed case + numbers + special)
+    main_domain = domain_clean.split('.')[0]
+    if len(main_domain) >= 15 and len(set(main_domain)) >= 12:
+        # High character variety suggests random generation
+        random_indicators += 1
+    
+    # Only flag as random if multiple indicators present
+    if random_indicators >= 2:
+        risk_score += 25
+        risk_factors.append({"code": "random_domain", "description": "Auto-generated domain name", "weight": 25})
+    
+    # Landing page / tracker domains
+    landing_patterns = [
+        (r'\b(lander|landers|landing|landings)\b', "landing_page", "Landing page domain"),
+        (r'\b(track|tracker|trck|trk|tracking)\b', "tracker_domain", "Tracking domain"),
+        (r'\b(click|clck|clk)\b', "click_tracker", "Click tracking domain"),
     ]
-    for pattern, code, description in random_patterns:
+    for pattern, code, description in landing_patterns:
         if re.search(pattern, domain_clean):
-            risk_score += 20
-            risk_factors.append({"code": code, "description": description, "weight": 20})
+            risk_score += 30
+            risk_factors.append({"code": code, "description": description, "weight": 30})
+    
+    # Also check for tracker misspellings in query parameters
+    if 'trck' in query or 'trk' in query:
+        risk_score += 25
+        risk_factors.append({"code": "tracker_param", "description": "Tracking domain in query parameters", "weight": 25})
+    
+    # Auto-generated random path segments (like weqdfewdfewdf123123)
+    random_path_segments = 0
+    for segment in path_segments:
+        # Segment is 15+ chars with mix of letters and numbers (auto-generated)
+        if len(segment) >= 15 and re.search(r'[a-z]', segment) and re.search(r'\d', segment):
+            if len(set(segment)) >= 10:  # High variety = random
+                random_path_segments += 1
+    
+    if random_path_segments >= 2:
+        risk_score += 35
+        risk_factors.append({"code": "random_paths", "description": f"Auto-generated path segments ({random_path_segments} found)", "weight": 35})
+    elif random_path_segments == 1:
+        risk_score += 15
+        risk_factors.append({"code": "suspicious_path", "description": "Suspicious auto-generated path segment", "weight": 15})
+    
+    # Multiple tracking parameters (indicates tracking/redirect chain)
+    # Add leading ? to query for regex matching
+    query_for_regex = '?' + query
+    tracking_params = re.findall(r'[?&](clickid|bcid|cid|zxcv|token|session|ref|source|utm_[a-z]+)=', query_for_regex)
+    if len(tracking_params) >= 2:
+        risk_score += 30
+        risk_factors.append({"code": "heavy_tracking", "description": f"Heavy tracking parameters ({len(tracking_params)} found)", "weight": 30})
     
     # ===== CAP & DEDUPLICATE =====
     
@@ -537,6 +588,17 @@ async def check_risk_post(payload: dict):
             if len(random_parts) >= 2 or (len(random_parts) == 1 and len(parts) == 2):
                 risk_score += 30
                 risk_factors.append({"code": "random_domain", "description": f"Auto-generated domain name: {main_domain}", "weight": 30})
+    
+    # Pattern 1c: Landing page / tracker domains
+    landing_patterns = [
+        (r'\b(lander|landers|landing|landings)\b', "landing_page", "Landing page domain"),
+        (r'\b(track|tracker|trck|trk|tracking)\b', "tracker_domain", "Tracking domain"),
+        (r'\b(click|clck|clk)\b', "click_tracker", "Click tracking domain"),
+    ]
+    for pattern, code, description in landing_patterns:
+        if re.search(pattern, domain_clean):
+            risk_score += 30
+            risk_factors.append({"code": code, "description": description, "weight": 30})
     
     # Pattern 2: Suspicious redirect paths (zclkredirect, clk, redirect)
     redirect_paths = ['zclkredirect', 'clkredirect', 'redirect', 'rd', 'jump', 'goto', 'out', 'exit']
