@@ -461,8 +461,12 @@ class PayGuardApp(rumps.App):
                 self.logger.info(f"Alert cooldown active, skipping popup for: {url[:60]}")
                 return
             
-            # Play alert sound
+            # Play alert sound AND speak
             self._play_alert()
+            try:
+                subprocess.run(["say", "Warning! PayGuard has detected a suspicious website"], timeout=5)
+            except:
+                pass
             
             risk_level = data.get("risk_level", "HIGH")
             risk_factors = data.get("risk_factors", ["Suspicious website detected"])
@@ -470,10 +474,11 @@ class PayGuardApp(rumps.App):
             
             msg = f"⚠️ THREAT DETECTED ⚠️\n\nURL: {url[:60]}...\n\nRisk Level: {risk_level}\n\nRisk Factors:\n{factors_str}\n\n⚠️ Do not enter passwords or payment info on this site!"
             
-            subprocess.run([
+            # Show popup - run synchronously to ensure it shows
+            result = subprocess.run([
                 "osascript", "-e",
-                f'display dialog "{msg}" with title "🚨 PayGuard Alert" buttons {{"OK"}} default button "OK" with icon stop'
-            ], capture_output=True)
+                f'display dialog "{msg}" with title "🚨 PAYGUARD ALERT" buttons {{"OK"}} default button "OK" with icon stop'
+            ], capture_output=True, timeout=30)
             
             self.last_alert_time = current_time
             self.logger.info(f"Threat alert shown for: {url}")
