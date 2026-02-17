@@ -6,6 +6,7 @@ import uvicorn
 import json
 import re
 from datetime import datetime, timezone
+import httpx
 
 app = FastAPI(title="PayGuard Simple API")
 
@@ -24,10 +25,37 @@ async def health():
 async def health_v1():
     return {"status": "healthy", "timestamp": datetime.now(timezone.utc)}
 
+async def check_url_redirects(url: str) -> tuple[str, list[str]]:
+    """Follow redirects and return final URL + redirect chain."""
+    redirect_chain = [url]
+    try:
+        async with httpx.AsyncClient(follow_redirects=True, timeout=10.0) as client:
+            resp = await client.get(url, headers={"User-Agent": "PayGuard/1.0"})
+            final_url = str(resp.url)
+            # Build redirect chain from history
+            for redirect in resp.history:
+                redirect_url = str(redirect.url)
+                if redirect_url not in redirect_chain:
+                    redirect_chain.append(redirect_url)
+            if final_url not in redirect_chain:
+                redirect_chain.append(final_url)
+            return final_url, redirect_chain
+    except Exception:
+        return url, redirect_chain
+
 @app.get("/api/v1/risk")
-async def check_risk(url: str, fast: bool = False):
+async def check_risk(url: str, fast: bool = False, follow_redirects: bool = True):
     """Check URL risk for phishing detection with enhanced patterns"""
     from urllib.parse import urlparse, unquote
+    
+    # Follow redirects if requested
+    original_url = url
+    redirect_chain = [url]
+    if follow_redirects:
+        try:
+            url, redirect_chain = await check_url_redirects(url)
+        except Exception:
+            pass
     
     # Parse URL
     parsed = urlparse(url)
@@ -183,6 +211,30 @@ async def check_risk(url: str, fast: bool = False):
                                    'microsoft.com', 'facebook.com', 'netflix.com', 'chase.com']):
                 risk_score += weight
                 risk_factors.append({"code": code, "description": description, "weight": weight})
+    
+    # ===== SUSPICIOUS REDIRECT DOMAINS =====
+    # Domains commonly used for redirects to scams
+    suspicious_redirect_domains = [
+        (r'quandaledingle', 70, "meme_redirect_domain", "Known redirect domain (meme/pop culture site that redirects to scams)"),
+        (r'ww[0-9]+\.', 40, "parked_domain", "Parked domain with ww prefix"),
+        (r'^[0-9]{5,}\.', 50, "numeric_subdomain", "Numeric subdomain (often parked/redirect)"),
+    ]
+    
+    for pattern, weight, code, description in suspicious_redirect_domains:
+        if re.search(pattern, domain_clean):
+            risk_score += weight
+            risk_factors.append({"code": code, "description": description, "weight": weight})
+    
+    # Suspicious redirect parameters (JavaScript redirect tracking)
+    redirect_tracking_params = [
+        (r'[?&](ch|js|sid|session|token)=[a-zA-Z0-9_-]{10,}', 35, "redirect_tracking", "Redirect tracking parameters (common in scam chains)"),
+        (r'[?&](redirect|url|to|goto|target)=https?://', 40, "external_redirect", "External redirect parameter"),
+    ]
+    
+    for pattern, weight, code, description in redirect_tracking_params:
+        if re.search(pattern, query):
+            risk_score += weight
+            risk_factors.append({"code": code, "description": description, "weight": weight})
     
     # ===== 4. URL PATH ANALYSIS =====
     
@@ -371,6 +423,20 @@ async def check_risk_post(payload: dict):
     """Check URL risk via POST request (for menubar app compatibility)"""
     url = payload.get("url", "")
     fast = payload.get("fast", False)
+    follow_redirects_flag = payload.get("follow_redirects", True)
+    
+    # Follow redirects if requested
+    original_url = url
+    redirect_chain = [url]
+    redirect_factors = []
+    
+    if follow_redirects_flag:
+        try:
+            url, redirect_chain = await check_url_redirects(url)
+            if len(redirect_chain) > 1:
+                redirect_factors.append({"code": "redirect_chain", "description": f"🔗 Redirect chain detected ({len(redirect_chain)} hops)", "weight": 15})
+        except Exception:
+            pass
     
     # Call the same logic as GET endpoint
     from urllib.parse import urlparse, unquote
@@ -546,6 +612,29 @@ async def check_risk_post(payload: dict):
     
     for pattern, weight, code, description in crypto_patterns:
         if re.search(pattern, domain_clean + path):
+            risk_score += weight
+            risk_factors.append({"code": code, "description": description, "weight": weight})
+    
+    # Pattern 12b: Suspicious redirect domains (meme/pop culture sites that redirect to scams)
+    suspicious_redirect_domains = [
+        (r'quandaledingle', 70, "meme_redirect_domain", "Known redirect domain (meme/pop culture site that redirects to scams)"),
+        (r'ww[0-9]+\.', 40, "parked_domain", "Parked domain with ww prefix"),
+        (r'^[0-9]{5,}\.', 50, "numeric_subdomain", "Numeric subdomain (often parked/redirect)"),
+    ]
+    
+    for pattern, weight, code, description in suspicious_redirect_domains:
+        if re.search(pattern, domain_clean):
+            risk_score += weight
+            risk_factors.append({"code": code, "description": description, "weight": weight})
+    
+    # Pattern 12c: Redirect tracking parameters (common in scam chains)
+    redirect_tracking_params = [
+        (r'[?&](ch|js|sid|session|token)=[a-zA-Z0-9_-]{10,}', 35, "redirect_tracking", "Redirect tracking parameters (common in scam chains)"),
+        (r'[?&](redirect|url|to|goto|target)=https?://', 40, "external_redirect", "External redirect parameter"),
+    ]
+    
+    for pattern, weight, code, description in redirect_tracking_params:
+        if re.search(pattern, query):
             risk_score += weight
             risk_factors.append({"code": code, "description": description, "weight": weight})
     
