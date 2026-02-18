@@ -616,12 +616,19 @@ class PayGuardApp(rumps.App):
             self.title = ICON_PROTECTED
             return
         
+        self.logger.info(f"Captured image: {len(image_data)} bytes")
+        
         result = None
         if self.backend_online:
+            self.logger.info("Backend is online, scanning...")
             result = self._scan_with_backend(image_data)
+            self.logger.info(f"Backend result: {result}")
+        else:
+            self.logger.info("Backend is offline")
         
         # Also run local detector as backup - combine results
         local_result = LocalScamDetector.analyze_image(image_data, self.logger)
+        self.logger.info(f"Local result: {local_result}")
         if local_result.get("is_scam"):
             # Local detector found something - use that result
             result = local_result
