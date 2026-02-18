@@ -1865,9 +1865,10 @@ class RiskScoringEngine:
             risk.append('Many external scripts')
             delta -= 5.0
         inputs = re.findall(r'<input[^>]*type=["\']([^"\']+)["\']', content, flags=re.I)
-        if any(t.lower() == 'password' for t in inputs):
-            risk.append('Password input detected')
-            delta -= 5.0
+        # Don't penalize just for having a password input - legitimate sites have login forms
+        # Only flag if combined with other high-risk signals
+        has_password = any(t.lower() == 'password' for t in inputs)
+        
         links = re.findall(r'href=["\']([^"\']+)["\']', content, flags=re.I)
         cross_links = 0
         for h in links[:50]:
