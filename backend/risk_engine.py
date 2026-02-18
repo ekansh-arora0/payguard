@@ -370,6 +370,7 @@ class RiskScoringEngine:
             htrust_val = None
             text_spam_val = None
             phish_flag = False
+            has_phish_pattern = False
             if content is not None and self.html_cnn is not None:
                 try:
                     import numpy as _np
@@ -444,23 +445,40 @@ class RiskScoringEngine:
                             spam = float(prob[1].item()) if prob.shape[0] > 1 else (1.0 - ham)
                         text_spam_val = spam
                         cl = content.lower()
-                        has_phish_tokens = ('verify' in cl or 'password' in cl or 'login' in cl or 'account' in cl or 'urgent' in cl or 'suspended' in cl or 'limited' in cl)
-                        phish_flag = has_phish_tokens
-                        if has_phish_tokens and spam >= 0.95:
+                        # Smart phishing pattern detection - check for actual phishing phrases, not just keywords
+                        # This catches real phishing attempts while avoiding false positives on legitimate sites
+                        urgency_words = ['immediately', 'urgent', 'within 24 hours', 'act now', 'right away', 'suspend', 'terminate', 'lock', 'close your account']
+                        threat_words = ['account suspended', 'account locked', 'account closed', 'verify your', 'confirm your', 'update your', 'payment', 'expired', 'unauthorized']
+                        action_words = ['click here', 'click below', 'log in', 'sign in', 'login now']
+                        
+                        # Count actual phishing patterns (phrases, not single words)
+                        urgency_count = sum(1 for w in urgency_words if w in cl)
+                        threat_count = sum(1 for w in threat_words if w in cl)
+                        action_count = sum(1 for w in action_words if w in cl)
+                        
+                        # Real phishing has: urgency + threat + action (classic social engineering)
+                        # Or: high spam score + threat + action
+                        has_phish_pattern = (urgency_count >= 1 and threat_count >= 1 and action_count >= 1) or \
+                                          (spam >= 0.9 and threat_count >= 1 and action_count >= 1)
+                        
+                        if has_phish_pattern and spam >= 0.8:
                             alpha = 0.8
                             if abs(proba[0] - 0.5) < 0.1:
                                 alpha = 0.9
                             text_trust = max(0, min(100, ham * 100.0))
                             trust_score = alpha * trust_score + (1 - alpha) * text_trust
-                        elif ham >= 0.95 and not has_phish_tokens:
+                        elif ham >= 0.95 and not has_phish_pattern:
                             text_trust = max(0, min(100, ham * 100.0))
                             trust_score = 0.8 * trust_score + 0.2 * text_trust
                 except Exception:
                     pass
             if htrust_val is not None and text_spam_val is not None:
-                # Removed phish_flag check - it triggers false positives on legitimate login pages
-                # The "Combined text and HTML signals" was too aggressive
-                pass  # No longer penalizing this combination - causes too many false positives
+                # Smart combined analysis: only flag if actual phishing patterns detected
+                # AND text model is highly confident AND HTML trust is low
+                if text_spam_val >= 0.85 and has_phish_pattern and htrust_val <= 50.0:
+                    risk_factors.append('Combined text and HTML signals')
+                    trust_score = min(trust_score, htrust_val)
+                    trust_score = max(0.0, min(100.0, trust_score - 15.0))
             if content is not None:
                 try:
                     cs_delta, cs_risk, cs_safe = self._content_signals(url, content)
