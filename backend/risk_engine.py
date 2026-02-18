@@ -1958,32 +1958,21 @@ class RiskScoringEngine:
                     if action_host and action_host != host and not action_host.endswith(('google.com', 'facebook.com', 'microsoft.com', 'apple.com')):
                         risk_signals.append(f"Form submits to external domain: {action_host}")
             
-            # 2. Check for hidden form fields (credential harvesting)
+            # 2. Check for hidden form fields (credential harvesting) - require more for legitimate sites
             hidden_inputs = re.findall(r'<input[^>]*type\s*=\s*["\']hidden["\'][^>]*>', content, flags=re.I)
-            if len(hidden_inputs) >= 3:
+            if len(hidden_inputs) >= 5:
                 risk_signals.append(f"Multiple hidden form fields ({len(hidden_inputs)})")
             
             # 3. Check for fake login buttons (deceptive copy)
             login_buttons = re.findall(r'<button[^>]*>([^<]*)</button>|<input[^>]*type\s*=\s*["\']submit["\'][^>]*value\s*=\s*["\']([^"\']+)["\']', content, flags=re.I)
-            deceptive_words = ['verify', 'confirm', 'secure', 'update', 'validate']
+            deceptive_words = ['verify now', 'confirm now', 'secure now', 'update now', 'validate now']
             for btn_text in login_buttons:
                 btn = ' '.join(btn_text).lower()
                 if any(w in btn for w in deceptive_words):
                     risk_signals.append(f"Deceptive button text: {btn}")
             
-            # 4. Check for password fields with autocomplete enabled (security issue + phishing)
-            password_fields = re.findall(r'<input[^>]*type\s*=\s*["\']password["\'][^>]*>', content, flags=re.I)
-            for pf in password_fields:
-                if 'autocomplete' not in pf.lower():
-                    risk_signals.append("Password field without autocomplete protection")
-            
-            # 5. Check for external scripts from suspicious sources
-            script_srcs = re.findall(r'<script[^>]*src\s*=\s*["\']([^"\']+)["\']', content, flags=re.I)
-            suspicious_cdn = ['free', 'stat', 'track', 'ads', 'analytic', 'cdnjs', 'jsdelivr']
-            for src in script_srcs[:15]:
-                src_lower = src.lower()
-                if any(s in src_lower for s in suspicious_cdn) and 'google' not in src_lower and 'microsoft' not in src_lower:
-                    risk_signals.append(f"Suspicious external script: {src[:50]}")
+            # 4. REMOVED: Password field without autocomplete - too common on legitimate sites
+            # 5. REMOVED: Suspicious external scripts - too many false positives with modern CDNs
             
             # 6. Check for IP addresses in URLs (red flag)
             ip_pattern = re.findall(r'https?://\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}', content)
@@ -2011,13 +2000,16 @@ class RiskScoringEngine:
             if base64_patterns >= 10:
                 risk_signals.append("Heavy base64 encoding detected")
             
-            # If we found multiple risk signals, it's likely phishing
-            if len(risk_signals) >= 2:
-                return True, f"HTML code analysis: {'; '.join(risk_signals[:3])}"
-            elif len(risk_signals) == 1:
-                # Single signal needs to be strong
-                if 'external domain' in risk_signals[0].lower() or 'ip address' in risk_signals[0].lower():
-                    return True, f"HTML code analysis: {risk_signals[0]}"
+            # Only flag as phishing if we find 2+ REAL risk signals
+            # This catches actual phishing while avoiding false positives
+            strong_signals = [r for r in risk_signals if 'external domain' in r.lower() or 
+                             'ip address' in r.lower() or 
+                             'iframe' in r.lower() or 
+                             'mouse' in r.lower() or 
+                             'hidden' in r.lower()]
+            
+            if len(strong_signals) >= 1:
+                return True, f"HTML code analysis: {strong_signals[0]}"
             
             return False, ""
             
