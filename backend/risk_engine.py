@@ -1942,7 +1942,7 @@ class RiskScoringEngine:
             
             # 2. Check for hidden form fields (credential harvesting) - require more for legitimate sites
             hidden_inputs = re.findall(r'<input[^>]*type\s*=\s*["\']hidden["\'][^>]*>', content, flags=re.I)
-            if len(hidden_inputs) >= 5:
+            if len(hidden_inputs) >= 15:
                 risk_signals.append(f"Multiple hidden form fields ({len(hidden_inputs)})")
             
             # 3. Check for fake login buttons (deceptive copy)
