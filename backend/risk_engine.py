@@ -392,13 +392,8 @@ class RiskScoringEngine:
                             p = torch.sigmoid(y.view(-1)[0]).item()
                     htrust = max(0, min(100, float(p) * 100.0))
                     htrust_val = htrust
-                    cl = content.lower()
-                    alpha = 0.6
-                    if abs(proba[0] - 0.5) < 0.1:
-                        alpha = 0.4
-                    if ('login' in cl or 'password' in cl or 'verify' in cl) or int('<form' in cl):
-                        alpha = max(alpha, 0.5)
-                    trust_score = alpha * trust_score + (1 - alpha) * htrust
+                    # Use ML model output directly - no keyword injection
+                    trust_score = 0.6 * trust_score + 0.4 * htrust
                 except Exception:
                     pass
             elif content is not None and self.html_model is not None:
@@ -408,17 +403,8 @@ class RiskScoringEngine:
                     hproba = self.html_model.predict_proba(xh)[0]
                     htrust = max(0, min(100, float(hproba[0]) * 100.0))
                     htrust_val = htrust
-                    cl = content.lower()
-                    if 'login' in cl or 'password' in cl or 'verify' in cl:
-                        risk_factors.append('Page contains credential capture keywords')
-                    if cl.count('!') > 5:
-                        risk_factors.append('Excessive emphasis in content')
-                    alpha = 0.6
-                    if abs(proba[0] - 0.5) < 0.1:
-                        alpha = 0.4
-                    if ('login' in cl or 'password' in cl or 'verify' in cl) or int('<form' in cl):
-                        alpha = max(alpha, 0.5)
-                    trust_score = alpha * trust_score + (1 - alpha) * htrust
+                    # Use ML model output directly - no keyword injection
+                    trust_score = 0.6 * trust_score + 0.4 * htrust
                 except Exception:
                     pass
             # trust floor for reputable sites (reduce false positives)
@@ -472,13 +458,9 @@ class RiskScoringEngine:
                             trust_score = 0.8 * trust_score + 0.2 * text_trust
                 except Exception:
                     pass
-            if htrust_val is not None and text_spam_val is not None:
-                # Smart combined analysis: only flag if actual phishing patterns detected
-                # AND text model is highly confident AND HTML trust is low
-                if text_spam_val >= 0.85 and has_phish_pattern and htrust_val <= 50.0:
-                    risk_factors.append('Combined text and HTML signals')
-                    trust_score = min(trust_score, htrust_val)
-                    trust_score = max(0.0, min(100.0, trust_score - 15.0))
+            
+            # Let ML models handle detection - trust their outputs
+            # The HTML code analysis provides additional real-phishing detection
             if content is not None:
                 try:
                     cs_delta, cs_risk, cs_safe = self._content_signals(url, content)
