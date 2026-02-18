@@ -392,8 +392,14 @@ class RiskScoringEngine:
                             p = torch.sigmoid(y.view(-1)[0]).item()
                     htrust = max(0, min(100, float(p) * 100.0))
                     htrust_val = htrust
-                    # Use ML model output directly - no keyword injection
-                    trust_score = 0.6 * trust_score + 0.4 * htrust
+                    # If HTML model is confident about phishing (htrust < 40), trust it more
+                    # Otherwise blend normally
+                    if htrust < 40:
+                        # Strong phishing signal from HTML - weight it heavily
+                        trust_score = 0.3 * trust_score + 0.7 * htrust
+                        risk_factors.append('Suspicious HTML structure detected')
+                    else:
+                        trust_score = 0.6 * trust_score + 0.4 * htrust
                 except Exception:
                     pass
             elif content is not None and self.html_model is not None:
