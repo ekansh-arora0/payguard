@@ -458,10 +458,17 @@ class RiskScoringEngine:
                 except Exception:
                     pass
             if htrust_val is not None and text_spam_val is not None:
-                if (text_spam_val >= 0.8 and htrust_val <= 60.0) or (text_spam_val >= 0.7 and phish_flag and htrust_val <= 70.0):
+                # Only penalize if there are actual phishing indicators, not just generic "spam" detection
+                # This prevents false positives on legitimate sites like chatgpt.com
+                if text_spam_val >= 0.8 and phish_flag and htrust_val <= 60.0:
                     risk_factors.append('Combined text and HTML signals')
                     trust_score = min(trust_score, htrust_val)
                     trust_score = max(0.0, min(100.0, trust_score - 15.0))
+                elif text_spam_val >= 0.9 and htrust_val <= 50.0:
+                    # Very high spam confidence + very low HTML trust = likely actual threat
+                    risk_factors.append('Combined text and HTML signals')
+                    trust_score = min(trust_score, htrust_val)
+                    trust_score = max(0.0, min(100.0, trust_score - 20.0))
             if content is not None:
                 try:
                     cs_delta, cs_risk, cs_safe = self._content_signals(url, content)
