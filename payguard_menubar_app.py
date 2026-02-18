@@ -109,8 +109,12 @@ class LocalScamDetector:
         
         try:
             img = Image.open(io.BytesIO(image_data))
-            img.thumbnail((400, 400))
-            colors = img.convert("RGB").getcolors(maxcolors=100000)
+            w, h = img.size
+            
+            # First check overall screen
+            img_small = img.copy()
+            img_small.thumbnail((400, 400))
+            colors = img_small.convert("RGB").getcolors(maxcolors=100000)
             
             if not colors:
                 return {"is_scam": False, "confidence": 0}
@@ -122,12 +126,10 @@ class LocalScamDetector:
                 count for count, (r, g, b) in colors
                 if r > 180 and g < 80 and b < 80
             )
-            # Blue screen (tech support scams)
             blue_count = sum(
                 count for count, (r, g, b) in colors
                 if b > 150 and r < 100 and g < 150
             )
-            # Orange/yellow (warnings)
             orange_count = sum(
                 count for count, (r, g, b) in colors
                 if r > 200 and g > 100 and g < 220 and b < 100
@@ -137,16 +139,48 @@ class LocalScamDetector:
             blue_ratio = blue_count / total if total > 0 else 0
             orange_ratio = orange_count / total if total > 0 else 0
             
-            # Debug logging
-            if logger:
-                logger.debug(f"Screen colors: red={red_ratio:.1%}, blue={blue_ratio:.1%}, orange={orange_ratio:.1%}")
+            # Check tiles/grids for localized detection (popup is small part of screen)
+            # Use larger image for tile detection
+            img_medium = img.copy()
+            img_medium.thumbnail((800, 800))
+            w_m, h_m = img_medium.size
             
-            red_ratio = red_count / total if total > 0 else 0
-            blue_ratio = blue_count / total if total > 0 else 0
-            orange_ratio = orange_count / total if total > 0 else 0
+            grid = 4
+            th = h_m // grid
+            tw = w_m // grid
+            max_tile_red = 0
+            max_tile_blue = 0
+            max_tile_orange = 0
+            
+            for gy in range(grid):
+                for gx in range(grid):
+                    x0, y0 = gx * tw, gy * th
+                    x1 = (gx + 1) * tw if gx < grid - 1 else w_m
+                    y1 = (gy + 1) * th if gy < grid - 1 else h_m
+                    tile = img_medium.crop((x0, y0, x1, y1))
+                    tile_colors = tile.convert("RGB").getcolors(maxcolors=100000)
+                    if not tile_colors:
+                        continue
+                    tile_total = sum(c for c, _ in tile_colors)
+                    if tile_total == 0:
+                        continue
+                    tile_red = sum(c for c, (r, g, b) in tile_colors if r > 180 and g < 80 and b < 80) / tile_total
+                    tile_blue = sum(c for c, (r, g, b) in tile_colors if b > 150 and r < 100 and g < 150) / tile_total
+                    tile_orange = sum(c for c, (r, g, b) in tile_colors if r > 200 and g > 100 and g < 220 and b < 100) / tile_total
+                    max_tile_red = max(max_tile_red, tile_red)
+                    max_tile_blue = max(max_tile_blue, tile_blue)
+                    max_tile_orange = max(max_tile_orange, tile_orange)
+            
+            # Use the maximum of overall ratio OR highest tile ratio
+            red_ratio = max(red_ratio, max_tile_red)
+            blue_ratio = max(blue_ratio, max_tile_blue)
+            orange_ratio = max(orange_ratio, max_tile_orange)
+            
+            if logger:
+                logger.debug(f"Screen colors: red={red_ratio:.1%}, blue={blue_ratio:.1%}, orange={orange_ratio:.1%} (max tile)")
             
             # Red warning screen (classic virus alert)
-            if red_ratio > 0.05:
+            if red_ratio > 0.15:
                 confidence = min(75 + int(red_ratio * 50), 98)
                 return {
                     "is_scam": True,
@@ -155,7 +189,7 @@ class LocalScamDetector:
                 }
             
             # Blue screen (tech support scam)
-            if blue_ratio > 0.10:
+            if blue_ratio > 0.20:
                 confidence = min(60 + int(blue_ratio * 40), 95)
                 return {
                     "is_scam": True,
@@ -164,7 +198,7 @@ class LocalScamDetector:
                 }
             
             # Orange warning
-            if orange_ratio > 0.08:
+            if orange_ratio > 0.15:
                 confidence = min(50 + int(orange_ratio * 40), 90)
                 return {
                     "is_scam": True,
@@ -589,8 +623,10 @@ class PayGuardApp(rumps.App):
                 "metadata": {"source": "menubar"}
             }
             r = requests.post(f"{BACKEND_URL}/api/media-risk/bytes", json=payload, timeout=30)
+            self.logger.info(f"Backend response status: {r.status_code}")
             if r.status_code == 200:
                 data = r.json()
+                self.logger.info(f"Backend data: {data}")
                 scam = data.get("scam_alert", {})
                 if scam.get("is_scam"):
                     return {
@@ -598,7 +634,18 @@ class PayGuardApp(rumps.App):
                         "confidence": scam.get("confidence", 80),
                         "reason": scam.get("senior_message", "Threat detected"),
                     }
+                # Check visual cues
+                reasons = data.get("reasons", [])
+                for reason in reasons:
+                    if "visual scam" in reason.lower() or "red" in reason.lower():
+                        return {
+                            "is_scam": True,
+                            "confidence": 75,
+                            "reason": reason,
+                        }
                 return {"is_scam": False}
+            else:
+                self.logger.error(f"Backend error: {r.text}")
         except Exception as e:
             self.logger.error(f"Backend error: {e}")
         return None
