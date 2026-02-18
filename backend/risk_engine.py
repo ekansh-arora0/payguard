@@ -487,6 +487,16 @@ class RiskScoringEngine:
                     safety_indicators.extend(cs_safe)
                 except Exception:
                     pass
+            
+            # Smart HTML code analysis - check actual code structure
+            if content is not None:
+                try:
+                    is_phishing, reason = self._html_code_analysis(url, content)
+                    if is_phishing:
+                        risk_factors.append(reason)
+                        trust_score = max(0, min(100, trust_score - 25))
+                except Exception:
+                    pass
             # Trusted domain boost — override ML false positives for well-known sites
             if self._is_trusted_domain(domain) and not is_blacklisted:
                 trust_score = max(trust_score, 75.0)
@@ -1925,6 +1935,94 @@ class RiskScoringEngine:
         except Exception:
             pass
         return delta, risk, safe
+
+    def _html_code_analysis(self, url: str, content: str) -> Tuple[bool, str]:
+        """
+        Analyze actual HTML code structure for phishing patterns.
+        Returns (is_phishing, reason) - much more accurate than text analysis.
+        """
+        try:
+            from urllib.parse import urlparse, urljoin
+            host = urlparse(url).netloc.lower()
+            if not host:
+                return False, ""
+            
+            cl = content.lower()
+            risk_signals = []
+            
+            # 1. Check forms submitting to external domains (major phishing indicator)
+            form_actions = re.findall(r'<form[^>]*action\s*=\s*["\']([^"\']+)["\']', content, flags=re.I)
+            for action in form_actions[:10]:
+                if action.startswith('http'):
+                    action_host = urlparse(action).netloc.lower()
+                    if action_host and action_host != host and not action_host.endswith(('google.com', 'facebook.com', 'microsoft.com', 'apple.com')):
+                        risk_signals.append(f"Form submits to external domain: {action_host}")
+            
+            # 2. Check for hidden form fields (credential harvesting)
+            hidden_inputs = re.findall(r'<input[^>]*type\s*=\s*["\']hidden["\'][^>]*>', content, flags=re.I)
+            if len(hidden_inputs) >= 3:
+                risk_signals.append(f"Multiple hidden form fields ({len(hidden_inputs)})")
+            
+            # 3. Check for fake login buttons (deceptive copy)
+            login_buttons = re.findall(r'<button[^>]*>([^<]*)</button>|<input[^>]*type\s*=\s*["\']submit["\'][^>]*value\s*=\s*["\']([^"\']+)["\']', content, flags=re.I)
+            deceptive_words = ['verify', 'confirm', 'secure', 'update', 'validate']
+            for btn_text in login_buttons:
+                btn = ' '.join(btn_text).lower()
+                if any(w in btn for w in deceptive_words):
+                    risk_signals.append(f"Deceptive button text: {btn}")
+            
+            # 4. Check for password fields with autocomplete enabled (security issue + phishing)
+            password_fields = re.findall(r'<input[^>]*type\s*=\s*["\']password["\'][^>]*>', content, flags=re.I)
+            for pf in password_fields:
+                if 'autocomplete' not in pf.lower():
+                    risk_signals.append("Password field without autocomplete protection")
+            
+            # 5. Check for external scripts from suspicious sources
+            script_srcs = re.findall(r'<script[^>]*src\s*=\s*["\']([^"\']+)["\']', content, flags=re.I)
+            suspicious_cdn = ['free', 'stat', 'track', 'ads', 'analytic', 'cdnjs', 'jsdelivr']
+            for src in script_srcs[:15]:
+                src_lower = src.lower()
+                if any(s in src_lower for s in suspicious_cdn) and 'google' not in src_lower and 'microsoft' not in src_lower:
+                    risk_signals.append(f"Suspicious external script: {src[:50]}")
+            
+            # 6. Check for IP addresses in URLs (red flag)
+            ip_pattern = re.findall(r'https?://\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}', content)
+            if ip_pattern:
+                risk_signals.append("Page contains IP address URL")
+            
+            # 7. Check for data: URIs (can hide malicious content)
+            data_uri_count = len(re.findall(r'<script[^>]*src\s*=\s*["\']data:', content, flags=re.I))
+            if data_uri_count >= 2:
+                risk_signals.append(f"Inline data scripts ({data_uri_count})")
+            
+            # 8. Check for iframe embedding (clickjacking)
+            iframes = re.findall(r'<iframe[^>]*src\s*=\s*["\']([^"\']+)["\']', content, flags=re.I)
+            for iframe in iframes[:5]:
+                if iframe.startswith('http') and urlparse(iframe).netloc.lower() != host:
+                    risk_signals.append(f"External iframe: {iframe[:40]}")
+            
+            # 9. Check for onmouseover events (fake URL bar)
+            mouse_events = re.findall(r'onmouseover\s*=\s*["\'][^"\']*location', content, flags=re.I)
+            if mouse_events:
+                risk_signals.append("Fake URL bar via mouse events")
+            
+            # 10. Check for base64-encoded content (obfuscation)
+            base64_patterns = len(re.findall(r'[a-zA-Z0-9+/]{50,}={0,2}', content))
+            if base64_patterns >= 10:
+                risk_signals.append("Heavy base64 encoding detected")
+            
+            # If we found multiple risk signals, it's likely phishing
+            if len(risk_signals) >= 2:
+                return True, f"HTML code analysis: {'; '.join(risk_signals[:3])}"
+            elif len(risk_signals) == 1:
+                # Single signal needs to be strong
+                if 'external domain' in risk_signals[0].lower() or 'ip address' in risk_signals[0].lower():
+                    return True, f"HTML code analysis: {risk_signals[0]}"
+            
+            return False, ""
+            
+        except Exception:
+            return False, ""
 
     def _predict_image_fake_bytes(self, b: bytes, static: bool = False):
         try:
