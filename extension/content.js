@@ -53,15 +53,22 @@
   const minSize = 128; // Minimum dimension for analysis
   
   async function analyzeImage(img) {
-    if (img.dataset[imageKey]) return;
+    if (img.dataset[imageKey]) {
+      console.log(`PayGuard: Skipping already checked image`);
+      return;
+    }
     img.dataset[imageKey] = 'checking';
     
     try {
+      console.log(`PayGuard: Analyzing image: ${img.src.substring(0, 80)}...`);
       // Get image dimensions
       const w = img.naturalWidth || img.width;
       const h = img.naturalHeight || img.height;
       
+      console.log(`PayGuard: Image dimensions: ${w}x${h}`);
+      
       if (w < minSize || h < minSize) {
+        console.log(`PayGuard: Image too small (${w}x${h}), skipping`);
         img.dataset[imageKey] = 'too-small';
         return;
       }
@@ -74,8 +81,10 @@
       }
       
       // Fetch image as blob
+      console.log(`PayGuard: Fetching image...`);
       const response = await fetch(imgUrl);
       if (!response.ok) {
+        console.log(`PayGuard: Fetch failed: ${response.status}`);
         img.dataset[imageKey] = 'fetch-error';
         return;
       }
@@ -95,6 +104,7 @@
       const base64 = await base64Promise;
       
       // Send to backend
+      console.log(`PayGuard: Sending to backend API...`);
       const apiResponse = await fetch(api + '/media-risk/bytes', {
         method: 'POST',
         headers: {
@@ -111,18 +121,22 @@
       if (apiResponse.ok) {
         const result = await apiResponse.json();
         const fakeProb = result.image_fake_prob || 0;
+        console.log(`PayGuard: API response - Fake prob: ${fakeProb}%`);
         
         img.dataset[imageKey] = 'checked';
         img.dataset.payguardAiScore = fakeProb;
         
-        // If AI-generated (>=70% probability), add warning overlay
-        if (fakeProb >= 70) {
+        // If AI-generated (>=60% probability), add warning overlay
+        console.log(`PayGuard: Image ${imgUrl.substring(0, 50)}... - Fake prob: ${fakeProb}%`);
+        if (fakeProb >= 60) {
+          console.log(`PayGuard: AI Image detected! Adding warning.`);
           addAiWarning(img, fakeProb);
         }
       } else {
         img.dataset[imageKey] = 'api-error';
       }
     } catch (e) {
+      console.error(`PayGuard: Error analyzing image: ${e}`);
       img.dataset[imageKey] = 'error';
     }
   }
