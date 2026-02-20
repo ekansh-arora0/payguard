@@ -145,12 +145,16 @@ class LocalScamDetector:
             img_medium.thumbnail((800, 800))
             w_m, h_m = img_medium.size
             
-            grid = 4
+            # Use finer grid (8x8 = 100x100 tiles) to catch smaller popups
+            grid = 8
             th = h_m // grid
             tw = w_m // grid
             max_tile_red = 0
             max_tile_blue = 0
             max_tile_orange = 0
+            
+            # Track consecutive colored tiles (indicates a popup box)
+            popup_candidates = []
             
             for gy in range(grid):
                 for gx in range(grid):
@@ -167,14 +171,56 @@ class LocalScamDetector:
                     tile_red = sum(c for c, (r, g, b) in tile_colors if r > 180 and g < 80 and b < 80) / tile_total
                     tile_blue = sum(c for c, (r, g, b) in tile_colors if b > 150 and r < 100 and g < 150) / tile_total
                     tile_orange = sum(c for c, (r, g, b) in tile_colors if r > 200 and g > 100 and g < 220 and b < 100) / tile_total
+                    
                     max_tile_red = max(max_tile_red, tile_red)
                     max_tile_blue = max(max_tile_blue, tile_blue)
                     max_tile_orange = max(max_tile_orange, tile_orange)
+                    
+                    # Track tiles with warning colors for popup detection
+                    if tile_red > 0.10 or tile_blue > 0.10 or tile_orange > 0.10:
+                        popup_candidates.append({
+                            'gx': gx, 'gy': gy, 'red': tile_red, 'blue': tile_blue, 'orange': tile_orange
+                        })
+            
+            # Check for popup pattern: consecutive tiles in center area
+            center_popup = False
+            if len(popup_candidates) >= 4:
+                # Check if colored tiles form a rectangular region (popup shape)
+                xs = [c['gx'] for c in popup_candidates]
+                ys = [c['gy'] for c in popup_candidates]
+                
+                # Look for clusters in center (where popups usually appear)
+                center_x_min, center_x_max = grid // 3, 2 * grid // 3
+                center_y_min, center_y_max = grid // 4, 3 * grid // 4
+                
+                center_tiles = [c for c in popup_candidates 
+                               if center_x_min <= c['gx'] <= center_x_max 
+                               and center_y_min <= c['gy'] <= center_y_max]
+                
+                if len(center_tiles) >= 4:
+                    # Check if they form a box-like shape
+                    unique_x = len(set(c['gx'] for c in center_tiles))
+                    unique_y = len(set(c['gy'] for c in center_tiles))
+                    if unique_x >= 2 and unique_y >= 2:
+                        center_popup = True
+                        if logger:
+                            logger.debug(f"Center popup detected: {len(center_tiles)} tiles")
             
             # Use the maximum of overall ratio OR highest tile ratio
+            # Boost detection if we found a center popup pattern
             red_ratio = max(red_ratio, max_tile_red)
             blue_ratio = max(blue_ratio, max_tile_blue)
             orange_ratio = max(orange_ratio, max_tile_orange)
+            
+            # Lower thresholds if we detected a popup pattern in the center
+            if center_popup:
+                red_threshold = 0.08  # Lower from 0.15
+                blue_threshold = 0.08  # Lower from 0.20
+                orange_threshold = 0.08  # Lower from 0.15
+            else:
+                red_threshold = 0.15
+                blue_threshold = 0.20
+                orange_threshold = 0.15
             
             if logger:
                 logger.debug(f"Screen colors: red={red_ratio:.1%}, blue={blue_ratio:.1%}, orange={orange_ratio:.1%} (max tile)")
@@ -209,19 +255,67 @@ class LocalScamDetector:
                         })
             
             # Analyze warning regions with OCR for scam text patterns
+            # Merge adjacent tiles to handle small popups better
+            merged_regions = []
+            used_tiles = set()
+            
+            for i, region in enumerate(warning_regions):
+                if i in used_tiles:
+                    continue
+                
+                # Find all connected tiles
+                connected = [region]
+                used_tiles.add(i)
+                
+                # Check neighbors
+                for j, other in enumerate(warning_regions):
+                    if j in used_tiles:
+                        continue
+                    # Check if adjacent (within 1 tile)
+                    if abs(region['x'] - other['x']) <= tw and abs(region['y'] - other['y']) <= th:
+                        connected.append(other)
+                        used_tiles.add(j)
+                
+                if len(connected) >= 2:
+                    # Merge tiles into larger region
+                    min_x = min(r['x'] for r in connected)
+                    min_y = min(r['y'] for r in connected)
+                    max_x = max(r['x'] + tw for r in connected)
+                    max_y = max(r['y'] + th for r in connected)
+                    
+                    merged_tile = img_medium.crop((min_x, min_y, max_x, max_y))
+                    avg_red = sum(r['red'] for r in connected) / len(connected)
+                    avg_blue = sum(r['blue'] for r in connected) / len(connected)
+                    
+                    merged_regions.append({
+                        'tile': merged_tile,
+                        'red': avg_red,
+                        'blue': avg_blue,
+                        'size': len(connected)
+                    })
+            
+            # Also add individual tiles if they didn't merge
+            for i, region in enumerate(warning_regions):
+                if i not in used_tiles:
+                    merged_regions.append(region)
+            
             scam_indicators = []
-            for region in warning_regions:
+            for region in merged_regions:
                 try:
+                    # Skip tiny regions
+                    if region['tile'].size[0] < 50 or region['tile'].size[1] < 50:
+                        continue
+                    
                     # Use pytesseract if available
                     import pytesseract
                     text = pytesseract.image_to_string(region['tile'], config='--psm 6').lower()
                     
                     # Scam popup patterns
                     phone_pattern = r'\b1-\d{3}-\d{3}-\d{4}\b|\b1-8\d{2}-\d{3}-\d{4}\b|\(\d{3}\)\s*\d{3}-\d{4}'
-                    urgency_words = ['immediately', 'urgent', 'right now', 'act now', 'within', 'hours']
-                    action_words = ['call now', 'click here', 'download', 'install now', 'allow']
-                    threat_words = ['virus', 'infected', 'hacked', 'compromised', 'stolen', 'suspended']
-                    fake_brands = ['microsoft', 'apple', 'windows', 'macos', 'security', 'alert']
+                    urgency_words = ['immediately', 'urgent', 'right now', 'act now', 'within', 'hours', 'asap']
+                    action_words = ['call now', 'click here', 'download', 'install now', 'allow', 'support']
+                    threat_words = ['virus', 'infected', 'hacked', 'compromised', 'stolen', 'suspended', 'blocked', 'locked']
+                    fake_brands = ['microsoft', 'apple', 'windows', 'macos', 'security', 'alert', 'warning']
                     
                     has_phone = bool(re.search(phone_pattern, text))
                     has_urgency = any(word in text for word in urgency_words)
@@ -237,11 +331,12 @@ class LocalScamDetector:
                     if has_threat: score += 25
                     if has_brand: score += 10
                     
-                    # Color bonus
-                    if region['red'] > 0.20: score += 15
-                    if region['blue'] > 0.15: score += 10
+                    # Color bonus - lower thresholds for small popups
+                    if region['red'] > 0.10: score += 15
+                    if region['blue'] > 0.08: score += 10
+                    if region.get('size', 1) >= 4: score += 10  # Bonus for popup-sized regions
                     
-                    if score >= 50:
+                    if score >= 40:  # Lower threshold from 50
                         scam_indicators.append({
                             'score': score,
                             'text': text[:100],
@@ -278,17 +373,25 @@ class LocalScamDetector:
                 }
             
             # Fallback: simple color detection for obvious cases
-            if red_ratio > 0.15:
+            # Use lower thresholds if we detected a center popup pattern
+            if center_popup:
+                red_min = 0.08
+                blue_min = 0.08
+            else:
+                red_min = 0.15
+                blue_min = 0.20
+            
+            if red_ratio > red_min:
                 return {
                     "is_scam": True,
-                    "confidence": 70,
+                    "confidence": 70 if not center_popup else 60,
                     "reason": "Red warning screen detected - likely fake security alert",
                 }
             
-            if blue_ratio > 0.20:
+            if blue_ratio > blue_min:
                 return {
                     "is_scam": True,
-                    "confidence": 65,
+                    "confidence": 65 if not center_popup else 55,
                     "reason": "Blue tech support screen detected - common scam pattern",
                 }
                 
