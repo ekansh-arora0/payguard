@@ -179,31 +179,117 @@ class LocalScamDetector:
             if logger:
                 logger.debug(f"Screen colors: red={red_ratio:.1%}, blue={blue_ratio:.1%}, orange={orange_ratio:.1%} (max tile)")
             
-            # Red warning screen (classic virus alert)
-            if red_ratio > 0.15:
-                confidence = min(75 + int(red_ratio * 50), 98)
+            # Smart detection: combine color with text analysis using OCR
+            # First find regions with warning colors
+            warning_regions = []
+            for gy in range(grid):
+                for gx in range(grid):
+                    x0, y0 = gx * tw, gy * th
+                    x1 = (gx + 1) * tw if gx < grid - 1 else w_m
+                    y1 = (gy + 1) * th if gy < grid - 1 else h_m
+                    tile = img_medium.crop((x0, y0, x1, y1))
+                    tile_colors = tile.convert("RGB").getcolors(maxcolors=100000)
+                    if not tile_colors:
+                        continue
+                    tile_total = sum(c for c, _ in tile_colors)
+                    if tile_total == 0:
+                        continue
+                    tile_red = sum(c for c, (r, g, b) in tile_colors if r > 180 and g < 80 and b < 80) / tile_total
+                    tile_blue = sum(c for c, (r, g, b) in tile_colors if b > 150 and r < 100 and g < 150) / tile_total
+                    tile_orange = sum(c for c, (r, g, b) in tile_colors if r > 200 and g > 100 and g < 220 and b < 100) / tile_total
+                    
+                    # If this tile has warning colors, analyze it with OCR
+                    if tile_red > 0.20 or tile_blue > 0.15 or tile_orange > 0.20:
+                        warning_regions.append({
+                            'tile': tile,
+                            'red': tile_red,
+                            'blue': tile_blue,
+                            'orange': tile_orange,
+                            'x': x0, 'y': y0
+                        })
+            
+            # Analyze warning regions with OCR for scam text patterns
+            scam_indicators = []
+            for region in warning_regions:
+                try:
+                    # Use pytesseract if available
+                    import pytesseract
+                    text = pytesseract.image_to_string(region['tile'], config='--psm 6').lower()
+                    
+                    # Scam popup patterns
+                    phone_pattern = r'\b1-\d{3}-\d{3}-\d{4}\b|\b1-8\d{2}-\d{3}-\d{4}\b|\(\d{3}\)\s*\d{3}-\d{4}'
+                    urgency_words = ['immediately', 'urgent', 'right now', 'act now', 'within', 'hours']
+                    action_words = ['call now', 'click here', 'download', 'install now', 'allow']
+                    threat_words = ['virus', 'infected', 'hacked', 'compromised', 'stolen', 'suspended']
+                    fake_brands = ['microsoft', 'apple', 'windows', 'macos', 'security', 'alert']
+                    
+                    has_phone = bool(re.search(phone_pattern, text))
+                    has_urgency = any(word in text for word in urgency_words)
+                    has_action = any(word in text for word in action_words)
+                    has_threat = any(word in text for word in threat_words)
+                    has_brand = any(brand in text for brand in fake_brands)
+                    
+                    # Score the region
+                    score = 0
+                    if has_phone: score += 40
+                    if has_urgency: score += 20
+                    if has_action: score += 15
+                    if has_threat: score += 25
+                    if has_brand: score += 10
+                    
+                    # Color bonus
+                    if region['red'] > 0.20: score += 15
+                    if region['blue'] > 0.15: score += 10
+                    
+                    if score >= 50:
+                        scam_indicators.append({
+                            'score': score,
+                            'text': text[:100],
+                            'has_phone': has_phone,
+                            'has_urgency': has_urgency,
+                            'has_threat': has_threat,
+                            'colors': f"R:{region['red']:.0%} B:{region['blue']:.0%}"
+                        })
+                except:
+                    pass
+            
+            # If we found strong scam indicators, report it
+            if scam_indicators:
+                best = max(scam_indicators, key=lambda x: x['score'])
+                confidence = min(best['score'], 98)
+                
+                # Determine the type of scam
+                if best['has_phone'] and best['has_threat']:
+                    reason = "Tech support scam detected - fake virus alert with phone number"
+                elif best['has_threat']:
+                    reason = "Fake security warning detected"
+                elif best['has_phone']:
+                    reason = "Suspicious phone number in alert popup"
+                else:
+                    reason = "Suspicious popup detected"
+                
+                if logger:
+                    logger.info(f"Scam popup detected: {reason} (confidence: {confidence}%)")
+                
                 return {
                     "is_scam": True,
                     "confidence": confidence,
+                    "reason": reason,
+                }
+            
+            # Fallback: simple color detection for obvious cases
+            if red_ratio > 0.15:
+                return {
+                    "is_scam": True,
+                    "confidence": 70,
                     "reason": "Red warning screen detected - likely fake security alert",
                 }
             
-            # Blue screen (tech support scam)
             if blue_ratio > 0.20:
-                confidence = min(60 + int(blue_ratio * 40), 95)
                 return {
                     "is_scam": True,
-                    "confidence": confidence,
+                    "confidence": 65,
                     "reason": "Blue tech support screen detected - common scam pattern",
-                }
-            
-            # Orange warning
-            if orange_ratio > 0.15:
-                confidence = min(50 + int(orange_ratio * 40), 90)
-                return {
-                    "is_scam": True,
-                    "confidence": confidence,
-                    "reason": "Warning color detected - possible scam",
                 }
                 
         except Exception:
