@@ -809,7 +809,7 @@ class PayGuardApp(rumps.App):
             payload = {
                 "url": "screen://menubar",
                 "content": base64.b64encode(image_data).decode(),
-                "metadata": {"source": "menubar", "fast": True}  # Fast mode: skip slow DIRE AI scan
+                "metadata": {"source": "menubar"}
             }
             r = requests.post(f"{BACKEND_URL}/api/media-risk/bytes", json=payload, headers={"X-API-Key": "demo_key"}, timeout=30)
             self.logger.info(f"Backend response status: {r.status_code}")

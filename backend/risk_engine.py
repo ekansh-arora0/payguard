@@ -2004,11 +2004,7 @@ class RiskScoringEngine:
         except Exception:
             return False, ""
 
-    def _predict_image_fake_bytes(self, b: bytes, static: bool = False, fast: bool = False):
-        # Fast mode: Skip DIRE (12+ seconds) for quick visual-only scan
-        if fast:
-            return 0.0
-        
+    def _predict_image_fake_bytes(self, b: bytes, static: bool = False):
         try:
             import io
             from PIL import Image
