@@ -1036,8 +1036,8 @@ async def post_media_risk_bytes(
             media_score=round(score, 1),
             media_color=color,
             reasons=reasons,
-            image_fake_prob=round(p, 4),
-            scam_alert=scam_alert_data
+            image_fake_prob=round(score, 1),  # Return as percentage (score already * 100)
+            scam_alert_data=scam_alert_data
         )
         
         await db.metrics.insert_one({
