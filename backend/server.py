@@ -990,9 +990,11 @@ async def post_media_risk_bytes(
             raise HTTPException(status_code=400, detail="Invalid base64 content")
 
         static = request.metadata.get("static", False) if request.metadata else False
+        fast_mode = request.metadata.get("fast", False) if request.metadata else False
         
         # Call the risk engine to predict image fake probability
-        p = risk_engine._predict_image_fake_bytes(b, static=static)
+        # Fast mode skips DIRE (12+ seconds) and only does quick visual checks
+        p = risk_engine._predict_image_fake_bytes(b, static=static, fast=fast_mode)
         
         if p is None:
             score = 0.0
