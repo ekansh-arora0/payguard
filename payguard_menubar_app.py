@@ -608,6 +608,10 @@ class PayGuardApp(rumps.App):
     def _check_url(self, url, source="browser"):
         """Check a URL for threats with caching, URL analysis, and optional HTML analysis."""
         try:
+            # Skip local files and internal URLs
+            if url.startswith('file://') or url.startswith('chrome://') or url.startswith('about:'):
+                return
+            
             if not self.backend_online:
                 return
             
