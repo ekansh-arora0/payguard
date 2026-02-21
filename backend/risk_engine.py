@@ -2013,7 +2013,7 @@ class RiskScoringEngine:
             if min(w, h) < 128:
                 return 0.0
 
-            # 1. DIRE Model Prediction (Primary)
+            # 1. DIRE Model Prediction (Primary) - but only if image looks suspicious
             p_dire = None
             if self.dire_home and self.dire_model_path and self.dire_model_path.exists():
                 if self._dire_busy:
@@ -2030,6 +2030,29 @@ class RiskScoringEngine:
                     w, h = img.size
                     if w < 128 or h < 128:
                         return 0.0
+                    
+                    # FAST PRE-CHECK: Skip DIRE for obviously real images
+                    # Real photos have: many colors, natural texture variation
+                    # UI/graphics have: few colors, flat areas
+                    import numpy as _np
+                    small = img.copy()
+                    small.thumbnail((100, 100))
+                    colors = small.getcolors(maxcolors=10000)
+                    
+                    if colors:
+                        num_colors = len(colors)
+                        # Calculate color variance
+                        arr = _np.array(small)
+                        variance = arr.var()
+                        
+                        # Low color count + low variance = UI/graphic (skip DIRE)
+                        # High color count OR high variance = photo/possible AI (run DIRE)
+                        if num_colors < 100 and variance < 1000:
+                            logger.debug(f"Skipping DIRE: simple image (colors={num_colors}, var={variance:.0f})")
+                            return 0.0
+                        
+                        logger.debug(f"Running DIRE: complex image (colors={num_colors}, var={variance:.0f})")
+                        
                 except Exception as e:
                     logger.debug(f"Image load error: {e}")
                     return 0.0
@@ -2134,12 +2157,15 @@ class RiskScoringEngine:
                 
                 # Digital UI elements often have extremely sparse edges (mean_edge < 3.0)
                 # or very sharp, clean lines.
-                if low_colors or mean_edge < 3.5:
-                    p *= 0.05 # Massive penalty for flat UI
-                elif mean_edge < 8.0:
-                    p *= 0.2  # Heavy penalty for simple UI
-                elif mean_edge < 15.0:
-                    p *= 0.5  # Moderate penalty
+                # BUT: Don't penalize if DIRE is already very confident (>90%)
+                # This avoids suppressing actual AI-generated faces
+                if p < 0.90:  # Only apply UI penalties to uncertain detections
+                    if low_colors or mean_edge < 3.5:
+                        p *= 0.05 # Massive penalty for flat UI
+                    elif mean_edge < 8.0:
+                        p *= 0.2  # Heavy penalty for simple UI
+                    elif mean_edge < 15.0:
+                        p *= 0.5  # Moderate penalty
                 elif mean_edge > 40.0: # Very noisy/textured (AI often looks like this)
                     p = min(1.0, p * 1.1)
             except Exception:
