@@ -625,8 +625,8 @@ class PayGuardApp(rumps.App):
             if url in self.url_cache:
                 cache_time, cached_result = self.url_cache[url]
                 if current_time - cache_time < self.cache_ttl:
-                    # Use cached result
-                    if cached_result.get('risk_level') in ['HIGH', 'MEDIUM', 'CRITICAL']:
+                    # Use cached result - only alert on HIGH/CRITICAL, not MEDIUM
+                    if cached_result.get('risk_level') in ['HIGH', 'CRITICAL']:
                         self._show_url_threat_alert(url, cached_result)
                     return
             
@@ -637,7 +637,11 @@ class PayGuardApp(rumps.App):
                           'linkedin.com', 'instagram.com', 'yahoo.com', 'bing.com',
                           'pearson.com', 'pearsoned.com', 'fcps.edu', 'k12.com',
                           'vercel.app', 'netlify.app', 'opencode.ai', 'canvas.instructure.com',
-                          'localhost', '127.0.0.1', '0.0.0.0']
+                          'localhost', '127.0.0.1', '0.0.0.0',
+                          '.edu',  # All educational institutions
+                          'grammarly.com', 'lichess.org', 'chess.com',
+                          'weill.cornell.edu', 'jhu.edu', 'stonybrookmedicine.edu',
+                          'gatech.edu', 'cornell.edu', 'ratemyprofessors.com']
             domain = url.lower().split('/')[2] if '//' in url else url.lower()
             if any(safe in domain for safe in safe_domains):
                 return
@@ -710,8 +714,8 @@ class PayGuardApp(rumps.App):
                 # Cache the result
                 self.url_cache[url] = (time.time(), data)
                 
-                # Show alert for HIGH, MEDIUM, or CRITICAL risk
-                if risk_level.lower() in ["high", "medium", "critical"]:
+                # Show alert only for HIGH or CRITICAL risk (not MEDIUM - too many false positives)
+                if risk_level.lower() in ["high", "critical"]:
                     self.logger.info(f"🚨 {risk_level.upper()} RISK DETECTED")
                     self._show_url_threat_alert(url, data)
                     self.threats_detected += 1
