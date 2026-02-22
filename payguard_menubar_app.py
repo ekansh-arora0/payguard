@@ -638,10 +638,12 @@ class PayGuardApp(rumps.App):
                           'pearson.com', 'pearsoned.com', 'fcps.edu', 'k12.com',
                           'vercel.app', 'netlify.app', 'opencode.ai', 'canvas.instructure.com',
                           'localhost', '127.0.0.1', '0.0.0.0',
-                          '.edu',  # All educational institutions
+                          '.edu', '.gov', '.mil',  # Trusted TLDs
                           'grammarly.com', 'lichess.org', 'chess.com',
                           'weill.cornell.edu', 'jhu.edu', 'stonybrookmedicine.edu',
-                          'gatech.edu', 'cornell.edu', 'ratemyprofessors.com']
+                          'gatech.edu', 'cornell.edu', 'ratemyprofessors.com',
+                          'wikipedia.org', 'mozilla.org', 'w3.org',
+                          'openai.com', 'anthropic.com', 'deepmind.com']
             domain = url.lower().split('/')[2] if '//' in url else url.lower()
             if any(safe in domain for safe in safe_domains):
                 return
