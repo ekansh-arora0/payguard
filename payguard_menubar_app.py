@@ -827,10 +827,10 @@ class PayGuardApp(rumps.App):
                 data = r.json()
                 self.logger.info(f"Backend data: {data}")
                 
-                # Check for AI-generated images
+                # Check for AI-generated images (lower threshold for screen scans since images are diluted)
                 image_fake_prob = data.get("image_fake_prob", 0)
                 self.logger.info(f"AI fake probability: {image_fake_prob}%")
-                if image_fake_prob and image_fake_prob >= 60:
+                if image_fake_prob and image_fake_prob >= 30:
                     return {
                         "is_scam": True,
                         "confidence": min(int(image_fake_prob), 98),
