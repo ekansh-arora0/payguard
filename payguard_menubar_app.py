@@ -815,7 +815,34 @@ class PayGuardApp(rumps.App):
     def _scan_with_backend(self, image_data):
         if not HAS_REQUESTS or not self.backend_online:
             return None
+        
+        import concurrent.futures
+        
+        def scan_tile(tile_data, tile_name):
+            """Scan a single tile"""
+            try:
+                payload = {
+                    "url": f"screen://{tile_name}",
+                    "content": base64.b64encode(tile_data).decode(),
+                    "metadata": {"source": "menubar_tile"}
+                }
+                r = requests.post(f"{BACKEND_URL}/api/media-risk/bytes", json=payload, headers={"X-API-Key": "demo_key"}, timeout=30)
+                if r.status_code == 200:
+                    return r.json()
+            except:
+                pass
+            return None
+        
+        def get_tile(img, x, y, w, h):
+            """Extract tile from image"""
+            from PIL import Image as PILImage
+            tile = img.crop((x, y, x + w, y + h))
+            buf = io.BytesIO()
+            tile.save(buf, format='PNG')
+            return buf.getvalue()
+        
         try:
+            # First: Quick full-screen scan
             payload = {
                 "url": "screen://menubar",
                 "content": base64.b64encode(image_data).decode(),
@@ -823,39 +850,94 @@ class PayGuardApp(rumps.App):
             }
             r = requests.post(f"{BACKEND_URL}/api/media-risk/bytes", json=payload, headers={"X-API-Key": "demo_key"}, timeout=30)
             self.logger.info(f"Backend response status: {r.status_code}")
-            if r.status_code == 200:
-                data = r.json()
-                self.logger.info(f"Backend data: {data}")
-                
-                # Check for AI-generated images (lower threshold for screen scans since images are diluted)
-                image_fake_prob = data.get("image_fake_prob", 0)
-                self.logger.info(f"AI fake probability: {image_fake_prob}%")
-                if image_fake_prob and image_fake_prob >= 30:
+            
+            if r.status_code != 200:
+                self.logger.error(f"Backend error: {r.text}")
+                return None
+            
+            data = r.json()
+            image_fake_prob = data.get("image_fake_prob", 0)
+            self.logger.info(f"Full screen AI fake probability: {image_fake_prob}%")
+            
+            # If high confidence already, return immediately
+            if image_fake_prob and image_fake_prob >= 60:
+                return {
+                    "is_scam": True,
+                    "confidence": min(int(image_fake_prob), 98),
+                    "reason": f"AI-generated image detected ({int(image_fake_prob)}%)",
+                }
+            
+            # Check for scam popups (these don't need tile analysis)
+            scam = data.get("scam_alert", {})
+            if scam.get("is_scam"):
+                return {
+                    "is_scam": True,
+                    "confidence": scam.get("confidence", 80),
+                    "reason": scam.get("senior_message", "Threat detected"),
+                }
+            
+            # Check visual cues for scam colors
+            reasons = data.get("reasons", [])
+            for reason in reasons:
+                if "visual scam" in reason.lower() or "red" in reason.lower():
                     return {
                         "is_scam": True,
-                        "confidence": min(int(image_fake_prob), 98),
-                        "reason": f"AI-generated image detected on screen ({int(image_fake_prob)}% fake probability)",
+                        "confidence": 75,
+                        "reason": reason,
                     }
+            
+            # If AI detection is borderline, do tile-based scan to find individual AI images
+            if image_fake_prob >= 15:
+                self.logger.info("Borderline AI detection - doing tile scan...")
                 
-                scam = data.get("scam_alert", {})
-                if scam.get("is_scam"):
-                    return {
-                        "is_scam": True,
-                        "confidence": scam.get("confidence", 80),
-                        "reason": scam.get("senior_message", "Threat detected"),
-                    }
-                # Check visual cues
-                reasons = data.get("reasons", [])
-                for reason in reasons:
-                    if "visual scam" in reason.lower() or "red" in reason.lower():
+                try:
+                    img = Image.open(io.BytesIO(image_data))
+                    w, h = img.size
+                    
+                    # Split into 3x3 grid (9 tiles)
+                    grid = 3
+                    tile_w = w // grid
+                    tile_h = h // grid
+                    
+                    tiles = []
+                    for gy in range(grid):
+                        for gx in range(grid):
+                            x = gx * tile_w
+                            y = gy * tile_h
+                            tw = tile_w if gx < grid - 1 else w - x
+                            th = tile_h if gy < grid - 1 else h - y
+                            tile_data = get_tile(img, x, y, tw, th)
+                            tiles.append((tile_data, f"tile_{gx}_{gy}"))
+                    
+                    # Scan all tiles in parallel
+                    max_prob = image_fake_prob
+                    best_tile = "fullscreen"
+                    
+                    with concurrent.futures.ThreadPoolExecutor(max_workers=3) as executor:
+                        futures = {executor.submit(scan_tile, td, tn): tn for td, tn in tiles}
+                        for future in concurrent.futures.as_completed(futures):
+                            tile_name = futures[future]
+                            result = future.result()
+                            if result:
+                                tile_prob = result.get("image_fake_prob", 0)
+                                self.logger.info(f"{tile_name}: {tile_prob}%")
+                                if tile_prob and tile_prob > max_prob:
+                                    max_prob = tile_prob
+                                    best_tile = tile_name
+                    
+                    self.logger.info(f"Max AI probability found: {max_prob}% (in {best_tile})")
+                    
+                    if max_prob >= 30:
                         return {
                             "is_scam": True,
-                            "confidence": 75,
-                            "reason": reason,
+                            "confidence": min(int(max_prob), 98),
+                            "reason": f"AI-generated image detected ({int(max_prob)}% in {best_tile})",
                         }
-                return {"is_scam": False}
-            else:
-                self.logger.error(f"Backend error: {r.text}")
+                except Exception as e:
+                    self.logger.error(f"Tile scan error: {e}")
+            
+            return {"is_scam": False}
+            
         except Exception as e:
             self.logger.error(f"Backend error: {e}")
         return None
