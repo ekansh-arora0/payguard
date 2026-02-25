@@ -552,7 +552,7 @@ export default function Home() {
             <p className="text-xl text-zinc-400 mb-6 leading-relaxed max-w-2xl mx-auto">
               AI-powered protection that catches fake PayPal, Amazon, and bank sites
               <strong className="text-white"> before you enter your password</strong>. 
-              Monitors your browser in real-time and tracks redirects to catch scams.
+              Detects AI-generated faces and monitors your browser in real-time.
             </p>
           </ScrollReveal>
 
@@ -570,6 +570,10 @@ export default function Home() {
               <div className="flex items-center gap-2">
                 <Timer className="w-4 h-4 text-emerald-500" />
                 <span>30 Second Setup</span>
+              </div>
+              <div className="flex items-center gap-2">
+                <Globe className="w-4 h-4 text-emerald-500" />
+                <span>macOS/Windows/Linux</span>
               </div>
             </div>
           </ScrollReveal>
@@ -715,36 +719,50 @@ export default function Home() {
             </div>
           </ScrollReveal>
 
-          <div className="grid md:grid-cols-2 gap-6">
+          <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-6">
             {[
               {
                 icon: Brain,
-                title: '50+ Detection Patterns',
-                description: 'Advanced algorithms detect typosquatting (paypa1, amaz0n), homograph attacks (xn-- domains), crypto scams, and 10+ threat categories.',
-                gradient: 'from-blue-500/20 to-cyan-500/20',
-                iconColor: 'text-blue-400'
-              },
-              {
-                icon: Eye,
-                title: 'Real-Time Browser Monitoring',
-                description: 'Automatically monitors Chrome/Safari history every 5 seconds. Detects fake login pages before you enter passwords.',
-                gradient: 'from-purple-500/20 to-pink-500/20',
-                iconColor: 'text-purple-400'
-              },
-              {
-                icon: Lock,
-                title: 'Multi-Layer Analysis',
-                description: 'Checks domain structure, URL paths (/login, /verify), query parameters (redirects, tokens), TLD reputation, and encoding tricks.',
-                gradient: 'from-emerald-500/20 to-teal-500/20',
-                iconColor: 'text-emerald-400'
-              },
-              {
-                icon: Zap,
-                title: 'Instant Alerts',
-                description: 'Popup warnings with sound alerts in under 20ms. 30-second cooldown prevents spam while keeping you protected.',
-                gradient: 'from-orange-500/20 to-red-500/20',
-                iconColor: 'text-orange-400'
-              }
+              title: '50+ Detection Patterns',
+              description: 'Advanced algorithms detect typosquatting (paypa1, amaz0n), homograph attacks (xn-- domains), crypto scams, and 10+ threat categories.',
+              gradient: 'from-blue-500/20 to-cyan-500/20',
+              iconColor: 'text-blue-400'
+            },
+            {
+              icon: Eye,
+              title: 'AI Image Detection',
+              description: 'Detects AI-generated faces using DIRE model (97%+ accuracy). Catches deepfakes in video calls and fake profile photos.',
+              gradient: 'from-purple-500/20 to-pink-500/20',
+              iconColor: 'text-purple-400'
+            },
+            {
+              icon: Lock,
+              title: 'Screen Threat Scanner',
+              description: 'Tile-based 3x3 grid scanning catches small AI images anywhere on screen. Scans every 30 seconds for maximum protection.',
+              gradient: 'from-emerald-500/20 to-teal-500/20',
+              iconColor: 'text-emerald-400'
+            },
+            {
+              icon: Zap,
+              title: 'Clipboard Scam Detection',
+              description: 'Automatically scans copied text for scam patterns like fake prize notifications, crypto scams, and urgent account warnings.',
+              gradient: 'from-orange-500/20 to-red-500/20',
+              iconColor: 'text-orange-400'
+            },
+            {
+              icon: Server,
+              title: 'Browser Monitoring',
+              description: 'Real-time monitoring of Chrome/Safari history every 5 seconds. Detects fake login pages before you enter passwords.',
+              gradient: 'from-cyan-500/20 to-blue-500/20',
+              iconColor: 'text-cyan-400'
+            },
+            {
+              icon: Globe,
+              title: 'Cross-Platform',
+              description: 'Works on macOS, Windows, and Linux. Menu bar app with auto-start and system tray support.',
+              gradient: 'from-yellow-500/20 to-amber-500/20',
+              iconColor: 'text-yellow-400'
+            }
             ].map((feature, i) => (
               <ScrollReveal key={i} delay={i * 100}>
                 <GlowCard gradient={`${feature.gradient}`} className="h-full">
@@ -769,13 +787,14 @@ export default function Home() {
               <div className="grid md:grid-cols-3 gap-4">
                 {[
                   { name: 'Typosquatting', examples: 'paypa1, amaz0n, g00gle' },
+                  { name: 'AI-Generated Faces', examples: 'Deepfakes, fake profile photos (DIRE model)' },
                   { name: 'Crypto Scams', examples: 'metamask-verify, wallet-connect' },
                   { name: 'Homograph Attacks', examples: 'xn-- domains, Cyrillic chars' },
                   { name: 'URL Shorteners', examples: 'bit.ly, tinyurl (hides destination)' },
                   { name: 'IP Addresses', examples: '192.168.1.1 instead of domain' },
                   { name: 'Suspicious Paths', examples: '/login, /verify, /account' },
                   { name: 'Open Redirects', examples: '?redirect=, ?url=, ?return=' },
-                  { name: 'Suspicious TLDs', examples: '.tk, .ml, .xyz, .top' },
+                  { name: 'Clipboard Scams', examples: 'Fake prize texts, urgent account warnings' },
                   { name: 'Tech Support Scams', examples: 'Fake Microsoft/Apple alerts' },
                 ].map((category, i) => (
                   <div key={i} className="p-4 bg-black/30 rounded-xl border border-white/5 hover:border-emerald-500/30 transition-colors">
