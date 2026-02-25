@@ -1,0 +1,59 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>AI Image Detection Test</title>
+    <style>
+        body { font-family: Arial, sans-serif; padding: 20px; background: #f5f5f5; }
+        .image-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 20px; margin: 20px 0; }
+        .image-card { background: white; padding: 15px; border-radius: 8px; box-shadow: 0 2px 4px rgba(0,0,0,0.1); }
+        .image-card img { width: 100%; height: auto; border-radius: 4px; }
+        .label { font-weight: bold; margin-top: 10px; padding: 5px 10px; border-radius: 4px; }
+        .real { background: #d4edda; color: #155724; }
+        .ai { background: #f8d7da; color: #721c24; }
+        h1 { color: #333; }
+        .instructions { background: #fff3cd; padding: 15px; border-radius: 8px; margin-bottom: 20px; }
+    </style>
+</head>
+<body>
+    <h1>🧪 AI Image Detection Test Page</h1>
+    
+    <div class="instructions">
+        <strong>Instructions:</strong><br>
+        1. Make sure PayGuard extension is enabled<br>
+        2. This page has both REAL and AI-generated images<br>
+        3. PayGuard should mark AI images with red borders<br>
+        4. Look for "⚠️ AI Image (X%)" warnings<br>
+    </div>
+
+    <h2>Test Images</h2>
+    <div class="image-grid">
+        <div class="image-card">
+            <img src="https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?w=400" alt="Real photo 1">
+            <div class="label real">✓ REAL PHOTO (Unsplash)</div>
+        </div>
+        
+        <div class="image-card">
+            <img src="https://images.unsplash.com/photo-1494790108377-be9c29b29330?w=400" alt="Real photo 2">
+            <div class="label real">✓ REAL PHOTO (Unsplash)</div>
+        </div>
+        
+        <div class="image-card">
+            <img src="https://thispersondoesnotexist.com/" alt="AI Generated Face">
+            <div class="label ai">⚠️ AI GENERATED (ThisPersonDoesNotExist)</div>
+        </div>
+        
+        <div class="image-card">
+            <img src="https://thispersondoesnotexist.com/" alt="AI Generated Face 2">
+            <div class="label ai">⚠️ AI GENERATED (ThisPersonDoesNotExist)</div>
+        </div>
+    </div>
+
+    <h2>Expected Results</h2>
+    <ul>
+        <li><strong>Real photos:</strong> Should show NO warning (green/white border)</li>
+        <li><strong>AI faces:</strong> Should show "⚠️ AI Image (X%)" with RED border</li>
+    </ul>
+
+    <p><em>Note: If images don't load, refresh the page. The AI images are generated in real-time.</em></p>
+</body>
+</html>
