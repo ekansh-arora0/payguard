@@ -889,11 +889,12 @@ export default function Home() {
                 {demoResult && (
                   <div className="border-t border-white/5 pt-6 animate-in fade-in slide-in-from-bottom-4 duration-500">
                     <div className={`flex items-center gap-4 mb-6 p-6 rounded-xl ${
+                      demoResult.level === 'CRITICAL' ? 'bg-red-950/30 border border-red-700/30' :
                       demoResult.level === 'HIGH' ? 'bg-red-500/10 border border-red-500/20' :
                       demoResult.level === 'MEDIUM' ? 'bg-yellow-500/10 border border-yellow-500/20' :
-                      'bg-emerald-500/10 border border-emerald-500/20'
+                      'bg-red-500/10 border border-red-500/20'
                     }`}>
-                      {demoResult.level === 'HIGH' ? (
+                      {demoResult.level === 'CRITICAL' || demoResult.level === 'HIGH' || demoResult.level === 'LOW' ? (
                         <AlertTriangle className="w-10 h-10 text-red-500" />
                       ) : demoResult.level === 'MEDIUM' ? (
                         <AlertTriangle className="w-10 h-10 text-yellow-500" />
@@ -902,9 +903,10 @@ export default function Home() {
                       )}
                       <div className="flex-1">
                         <div className={`text-3xl font-bold ${
+                          demoResult.level === 'CRITICAL' ? 'text-red-700' :
                           demoResult.level === 'HIGH' ? 'text-red-500' :
                           demoResult.level === 'MEDIUM' ? 'text-yellow-500' :
-                          'text-emerald-500'
+                          'text-red-500'
                         }`}>
                           {demoResult.level} RISK
                         </div>

@@ -4,6 +4,9 @@ from fastapi.responses import Response
 from dotenv import load_dotenv
 from starlette.middleware.cors import CORSMiddleware
 from motor.motor_asyncio import AsyncIOMotorClient
+from slowapi import Limiter
+from slowapi.util import get_remote_address
+from slowapi.errors import RateLimitExceeded
 import os
 import logging
 from pathlib import Path
@@ -24,6 +27,9 @@ from .models import (
 import httpx
 from .risk_engine import RiskScoringEngine
 from .auth import APIKeyManager, get_api_key, require_api_key
+
+# Rate limiter
+limiter = Limiter(key_func=get_remote_address)
 
 # Maximum request body size: 10 MB
 MAX_REQUEST_BODY_SIZE = 10 * 1024 * 1024
@@ -112,6 +118,17 @@ async def _seed_merchant_data():
 # Create the main app
 app = FastAPI(title="PayGuard API", version="1.0", lifespan=lifespan)
 
+# Add rate limiter
+app.state.limiter = limiter
+
+@app.exception_handler(RateLimitExceeded)
+async def rate_limit_handler(request: Request, exc: RateLimitExceeded):
+    return Response(
+        content='{"error": "Rate limit exceeded", "detail": str(exc)}',
+        status_code=429,
+        media_type="application/json"
+    )
+
 # Request tracking middleware for graceful shutdown
 @app.middleware("http")
 async def track_requests(request: Request, call_next):
@@ -124,6 +141,17 @@ async def track_requests(request: Request, call_next):
         return response
     finally:
         _active_requests -= 1
+
+# Root health check (no auth required)
+@app.get("/health")
+async def root_health():
+    """Root health check endpoint"""
+    return {
+        "status": "healthy",
+        "service": "PayGuard API",
+        "version": "1.0",
+        "timestamp": datetime.now(timezone.utc).isoformat(),
+    }
 
 # Create router with /api/v1 prefix (versioned API)
 api_router = APIRouter(prefix="/api/v1")
@@ -424,8 +452,10 @@ async def quick_risk_analysis(url: str, check_ssl: bool = True) -> RiskScore:
 # ============= Risk Assessment =============
 
 @api_router.post("/risk", response_model=RiskScore)
+@limiter.limit("30/minute")
 async def check_risk(
-    request: RiskCheckRequest,
+    request: Request,
+    body: RiskCheckRequest,
     api_key: str = Depends(require_api_key),
     fast: bool = True,  # Default to fast mode
     follow_redirects: bool = True  # Follow redirects to catch scam redirects
@@ -439,7 +469,7 @@ async def check_risk(
     try:
         await api_key_manager.validate_api_key(api_key)
         
-        logger.info(f"Checking risk for URL: {request.url} (fast={fast}, follow_redirects={follow_redirects})")
+        logger.info(f"Checking risk for URL: {body.url} (fast={fast}, follow_redirects={follow_redirects})")
         
         # Check redirects first if requested
         final_url = request.url
