@@ -402,6 +402,33 @@ async def quick_risk_analysis(url: str, check_ssl: bool = True) -> RiskScore:
         score -= 10
         risk_factors.append("URL suspiciously long")
     
+    # 9. Phishing Landing Page Detection
+    path_lower = url_lower.split('?')[0]
+    if '/landers/' in path_lower:
+        score -= 25
+        risk_factors.append("Phishing lander page detected (/landers/ path)")
+    
+    # 10. Random-looking path segments (common in phishing kits)
+    path_segments = [s for s in path_lower.split('/') if s]
+    random_pattern_count = 0
+    for seg in path_segments:
+        if len(seg) > 15 and any(c.isdigit() for c in seg) and any(c.isalpha() for c in seg):
+            # Looks like random alphanumeric string (e.g., "weqdfewdfewdf123123")
+            random_pattern_count += 1
+    if random_pattern_count >= 2:
+        score -= 30
+        risk_factors.append("Random-looking URL path segments detected")
+    
+    # 11. Click fraud / Traffic arbitrage tracking parameters
+    tracking_params = ['clickid', 'bcid', 'domain', 'subid', 'aff_id', 'affiliate', 'tid', 'transaction_id', 'sid', 'source_id']
+    found_tracking = []
+    for param in tracking_params:
+        if f'{param}=' in url_lower or param in url_lower:
+            found_tracking.append(param)
+    if len(found_tracking) >= 2:
+        score -= 25
+        risk_factors.append(f"Click fraud/tracking parameters detected: {', '.join(found_tracking[:3])}")
+    
     # Final score calculation
     score = max(0, min(100, score))
     
