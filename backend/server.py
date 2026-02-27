@@ -469,19 +469,20 @@ async def check_risk(
     try:
         await api_key_manager.validate_api_key(api_key)
         
-        logger.info(f"Checking risk for URL: {body.url} (fast={fast}, follow_redirects={follow_redirects})")
+        url = str(body.url)
+        logger.info(f"Checking risk for URL: {url} (fast={fast}, follow_redirects={follow_redirects})")
         
         # Check redirects first if requested
-        final_url = request.url
-        redirect_chain = [request.url]
+        final_url = url
+        redirect_chain = [url]
         redirect_risk_factors = []
         
         if follow_redirects:
             try:
-                final_url, redirect_chain = await check_redirects(request.url)
+                final_url, redirect_chain = await check_redirects(url)
                 if len(redirect_chain) > 1:
                     logger.info(f"URL redirects: {' -> '.join(redirect_chain)}")
-                    redirect_risk_factors.append(f"🔗 Redirect chain detected ({len(redirect_chain)} hops)")
+                    redirect_risk_factors.append(f"Redirect chain detected ({len(redirect_chain)} hops)")
                     # Check if any redirect in chain is suspicious
                     for redirect_url in redirect_chain[1:]:  # Skip original
                         redirect_analysis = await quick_risk_analysis(redirect_url)
