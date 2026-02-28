@@ -1113,6 +1113,36 @@ async def post_media_risk_bytes(
         logger.error(f"Error processing media bytes: {str(e)}")
         raise HTTPException(status_code=500, detail="Failed to process media")
 
+
+# ============= AI Image Metadata Detection =============
+
+@api_router.post("/media-risk/ai-metadata")
+async def check_ai_metadata(
+    file: UploadFile = File(...),
+    api_key: str = Depends(require_api_key)
+):
+    """
+    Check image for AI generation metadata indicators.
+    Scans EXIF, XMP, PNG chunks, and filenames for AI tool signatures.
+    """
+    try:
+        await api_key_manager.validate_api_key(api_key)
+        
+        from .ai_metadata_checker import check_image_ai_metadata_bytes
+        
+        contents = await file.read()
+        result = check_image_ai_metadata_bytes(contents)
+        
+        logger.info(f"AI metadata check: {result.get('is_ai')} (confidence: {result.get('confidence')}%)")
+        
+        return result
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error checking AI metadata: {str(e)}")
+        raise HTTPException(status_code=500, detail="Failed to check AI metadata")
+
+
 # ============= Statistics =============
 
 @api_router.get("/stats", response_model=Stats)
