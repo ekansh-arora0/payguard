@@ -2909,6 +2909,73 @@ class RiskScoringEngine:
             if base64_patterns >= 10:
                 risk_signals.append("Heavy base64 encoding detected")
 
+            # 11. CLICKJACKING DETECTION - Full-screen overlays
+            # Check for full-viewport iframes
+            fullscreen_iframe = re.findall(
+                r'<iframe[^>]*(?:width\s*=\s*["\']100%|height\s*=\s*["\']100%|style\s*=\s*["\'][^"\']*(?:width|height)[^"\']*100%)[^>]*>',
+                content, flags=re.I
+            )
+            if fullscreen_iframe:
+                risk_signals.append("Full-screen iframe detected (clickjacking)")
+
+            # Check for full-screen divs with high z-index
+            overlay_divs = re.findall(
+                r'<div[^>]*(?:style|class)[^>]*>',
+                content, flags=re.I
+            )
+            for div in overlay_divs:
+                div_lower = div.lower()
+                has_position = 'position:' in div_lower or 'position :' in div_lower.replace(' ', '')
+                has_full_size = ('100vh' in div_lower or '100vw' in div_lower or 
+                              ('100%' in div_lower and ('width' in div_lower or 'height' in div_lower)))
+                has_high_z = 'z-index' in div_lower
+                if has_position and has_full_size and has_high_z:
+                    risk_signals.append("Full-screen overlay div detected (clickjacking)")
+                    break
+
+            # 12. Check for aggressive click hijacking
+            # onClick that navigates or opens windows
+            click_hijack = re.findall(
+                r'onclick\s*=\s*["\'][^"\']*(?:window\.|location\.|open\()',
+                content, flags=re.I
+            )
+            if len(click_hijack) >= 3:
+                risk_signals.append(f"Multiple click handlers that redirect ({len(click_hijack)})")
+
+            # 13. Check for body onClick hijacking
+            body_onclick = re.findall(
+                r'<body[^>]*onclick\s*=\s*["\'][^"\']+',
+                content, flags=re.I
+            )
+            if body_onclick:
+                risk_signals.append("Body onclick redirect detected")
+
+            # 14. Check for preventDefault blocking (stops user from closing)
+            prevent_default = re.findall(
+                r'(?:addEventListener|on)\s*\(\s*["\']?(?:beforeunload|unload|keydown)["\']?.*preventDefault',
+                content, flags=re.I
+            )
+            if prevent_default:
+                risk_signals.append("Event blocking detected (preventDefault)")
+
+            # 15. Check for aggressive popups (multiple window.open)
+            window_open_count = len(re.findall(r'window\.open\s*\(', content, flags=re.I))
+            if window_open_count >= 2:
+                risk_signals.append(f"Multiple popup attempts ({window_open_count})")
+
+            # 16. Check for document.write abuse (malicious content injection)
+            doc_write_count = len(re.findall(r'document\.write\s*\(', content, flags=re.I))
+            if doc_write_count >= 3:
+                risk_signals.append(f"Multiple document.write calls ({doc_write_count})")
+
+            # 17. Check for display:none but still clickable elements (hidden traps)
+            hidden_traps = re.findall(
+                r'<[^>]+style\s*=\s*["\'][^"\']*display\s*:\s*none[^"\']*>[^<]*(?:button|a|input)',
+                content, flags=re.I
+            )
+            if hidden_traps:
+                risk_signals.append("Hidden clickable elements detected")
+
             # Only flag as phishing if we find 2+ REAL risk signals
             # This catches actual phishing while avoiding false positives
             strong_signals = [
@@ -2919,6 +2986,10 @@ class RiskScoringEngine:
                 or "iframe" in r.lower()
                 or "mouse" in r.lower()
                 or "hidden" in r.lower()
+                or "clickjack" in r.lower()
+                or "overlay" in r.lower()
+                or "redirect" in r.lower()
+                or "popup" in r.lower()
             ]
 
             if len(strong_signals) >= 1:

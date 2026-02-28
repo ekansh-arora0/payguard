@@ -64,7 +64,18 @@ class PayGuardApp:
         self.threats_detected = 0
         self.backend_online = False
         self.request_session = None
+        self.protection_enabled = True  # Simple ON/OFF
+        self.monitoring_active = False
+        self.monitor_thread = None
+        self.voice_alerts = True  # Voice alert option
         self._check_backend()
+        
+        # Auto-start on launch if enabled
+        if self.protection_enabled:
+            self.start_monitoring()
+        
+        # Setup auto-start
+        self.setup_auto_start()
         
         # Safe domains whitelist
         self.safe_domains = [
@@ -79,6 +90,95 @@ class PayGuardApp:
         ]
         
         logger.info("PayGuard initialized")
+    
+    def setup_auto_start(self):
+        """Setup auto-start on system boot"""
+        try:
+            if platform.system() == "Darwin":
+                # macOS: Add to LaunchAgents
+                plist_path = os.path.expanduser("~/Library/LaunchAgents/com.payguard.menubar.plist")
+                plist_content = '''<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+    <key>Label</key>
+    <string>com.payguard.menubar</string>
+    <key>ProgramArguments</key>
+    <array>
+        <string>/usr/bin/python3</string>
+        <string>{}/payguard_crossplatform.py</string>
+    </array>
+    <key>RunAtLoad</key>
+    <true/>
+</dict>
+</plist>'''.format(os.path.dirname(os.path.abspath(__file__)))
+                
+                if not os.path.exists(plist_path):
+                    with open(plist_path, 'w') as f:
+                        f.write(plist_content)
+                    logger.info(f"Auto-start configured: {plist_path}")
+                    
+            elif platform.system() == "Windows":
+                # Windows: Add to startup registry
+                import winreg
+                exe_path = sys.executable
+                script_path = os.path.abspath(__file__)
+                key_path = r"Software\Microsoft\Windows\CurrentVersion\Run"
+                try:
+                    key = winreg.OpenKey(winreg.HKEY_CURRENT_USER, key_path, 0, winreg.KEY_WRITE)
+                    winreg.SetValueEx(key, "PayGuard", 0, winreg.REG_SZ, f'"{exe_path}" "{script_path}"')
+                    winreg.CloseKey(key)
+                    logger.info("Auto-start configured for Windows")
+                except:
+                    logger.warning("Could not configure Windows auto-start")
+        except Exception as e:
+            logger.warning(f"Auto-start setup failed: {e}")
+    
+    def start_monitoring(self):
+        """Start background monitoring"""
+        if self.monitoring_active:
+            return
+        
+        self.monitoring_active = True
+        self.monitor_thread = threading.Thread(target=self._monitor_loop, daemon=True)
+        self.monitor_thread.start()
+        logger.info("Monitoring started")
+    
+    def stop_monitoring(self):
+        """Stop background monitoring"""
+        self.monitoring_active = False
+        if self.monitor_thread:
+            self.monitor_thread.join(timeout=2)
+        logger.info("Monitoring stopped")
+    
+    def _monitor_loop(self):
+        """Background monitoring loop - checks clipboard periodically"""
+        while self.monitoring_active:
+            try:
+                if self.protection_enabled:
+                    self.scan_clipboard()
+                time.sleep(5)  # Check every 5 seconds
+            except Exception as e:
+                logger.error(f"Monitor error: {e}")
+                time.sleep(5)
+    
+    def play_alert(self):
+        """Play loud alert sound for danger"""
+        if not self.voice_alerts:
+            return
+            
+        try:
+            if platform.system() == "Darwin":
+                # Use say command for voice alert
+                subprocess.run(["say", "Danger! Threat detected. Close the website now."], 
+                            capture_output=True)
+            elif platform.system() == "Windows":
+                # Windows TTS
+                import win32com.client
+                speaker = win32com.client.Dispatch("SAPI.SpVoice")
+                speaker.Speak("Danger! Threat detected. Close the website now.")
+        except Exception as e:
+            logger.warning(f"Voice alert failed: {e}")
     
     def _check_backend(self):
         """Check if backend is running"""
@@ -240,8 +340,9 @@ class PayGuardApp:
         return {"is_scam": False, "message": "No threats detected"}
     
     def scan_clipboard(self):
-        """Scan clipboard text for scams"""
+        """Scan clipboard text/URLs for scams - LIVE MONITORING"""
         try:
+            # Get clipboard content
             if platform.system() == "Darwin":
                 text = subprocess.run(["pbpaste"], capture_output=True, text=True, timeout=3).stdout
             elif platform.system() == "Windows":
@@ -254,11 +355,58 @@ class PayGuardApp:
             if not text:
                 return {"is_scam": False, "message": "Empty clipboard"}
             
+            # Check if it's a URL
+            import re
+            url_match = re.search(r'https?://[^\s<>"{}|\\^`\[\]]+', text.strip())
+            
+            if url_match and self.backend_online:
+                # LIVE URL CHECK - Check URL against backend
+                url = url_match.group(0)
+                
+                # Don't re-check same URL
+                if url == self.last_checked_url:
+                    return {"is_scam": False, "message": "Already checked"}
+                
+                try:
+                    r = requests.post(
+                        f"{BACKEND_URL}/api/v1/risk",
+                        json={"url": url},
+                        headers={"X-API-Key": API_KEY},
+                        timeout=5
+                    )
+                    if r.status_code == 200:
+                        result = r.json()
+                        risk_level = result.get("risk_level", "low")
+                        
+                        if risk_level in ["high", "critical"]:
+                            self.last_checked_url = url
+                            self.threats_detected += 1
+                            self.scans_performed += 1
+                            self.play_alert()  # Voice alert!
+                            logger.warning(f"DANGEROUS URL: {url} - {risk_level}")
+                            return {
+                                "is_scam": True,
+                                "confidence": 90,
+                                "reason": f"DANGEROUS! {result.get('risk_factors', ['Unknown threat'])[0]}"
+                            }
+                        elif risk_level == "medium":
+                            self.last_checked_url = url
+                            self.scans_performed += 1
+                            logger.warning(f"SUSPICIOUS URL: {url}")
+                            return {
+                                "is_scam": False,
+                                "confidence": 50,
+                                "reason": "Caution: Suspicious website"
+                            }
+                except Exception as e:
+                    logger.error(f"URL check failed: {e}")
+            
             # Simple scam keyword detection
             scam_keywords = [
                 "call now", "1-800", "urgent", "immediately",
                 "your account", "suspended", "verify", "password",
-                "bitcoin", "gift card", "western union"
+                "bitcoin", "gift card", "western union", "winner",
+                "congratulations", "prize", "claim now", "act now"
             ]
             
             text_lower = text.lower()
@@ -267,16 +415,17 @@ class PayGuardApp:
             if matches:
                 self.threats_detected += 1
                 self.scans_performed += 1
+                self.play_alert()  # Voice alert!
                 logger.warning(f"Clipboard scam detected: {matches}")
                 return {
                     "is_scam": True,
                     "confidence": 80,
-                    "reason": f"Scam keywords found: {matches}"
+                    "reason": f"SCAM! {matches[0].upper()} - Don't fall for it!"
                 }
             
             self.scans_performed += 1
-            return {"is_scam": False, "message": "Clipboard appears safe"}
-            
+            return {"is_scam": False, "message": "✅ Safe"}
+             
         except Exception as e:
             logger.error(f"Clipboard scan error: {e}")
             return {"is_scam": False, "message": str(e)}
@@ -300,48 +449,42 @@ def create_icon():
 
 
 def create_menu(app):
-    """Create system tray menu"""
-    def scan_screen_click(icon, item):
-        result = app.scan_screen()
-        if result.get("is_scam"):
-            show_notification(
-                "🚨 PayGuard Alert",
-                result.get("reason", "Threat detected!")
-            )
-        else:
-            show_notification(
-                "✅ PayGuard Scan Complete",
-                result.get("message", "Your screen appears safe")
-            )
+    """Create simplified system tray menu - one button ON/OFF"""
+    from pystray import MenuItem as Item
     
-    def scan_clipboard_click(icon, item):
+    def toggle_protection(icon, item):
+        app.protection_enabled = not app.protection_enabled
+        if app.protection_enabled:
+            show_notification("🛡️ PayGuard ON", "Protection is now active")
+            app.start_monitoring()
+        else:
+            show_notification("🛡️ PayGuard OFF", "Protection paused")
+            app.stop_monitoring()
+    
+    def scan_now(icon, item):
         result = app.scan_clipboard()
         if result.get("is_scam"):
-            show_notification(
-                "🚨 PayGuard Alert",
-                result.get("reason", "Scam detected!")
-            )
+            show_notification("🚨 DANGER!", result.get("reason", "Threat detected!"))
+            app.play_alert()
         else:
-            show_notification(
-                "✅ Clipboard Scan Complete",
-                result.get("message", "No threats found")
-            )
+            show_notification("✅ Safe", "No threats detected")
     
     def status_click(icon, item):
         app._check_backend()
+        status = "🟢 ACTIVE" if app.protection_enabled else "🔴 PAUSED"
         show_notification(
-            "📊 PayGuard Status",
-            f"Backend: {'Online' if app.backend_online else 'Offline'}\nScans: {app.scans_performed}\nThreats: {app.threats_detected}"
+            f"📊 PayGuard Status",
+            f"Status: {status}\nBackend: {'Online' if app.backend_online else 'Offline'}\nThreats blocked: {app.threats_detected}"
         )
     
     def quit_click(icon, item):
+        app.stop_monitoring()
         icon.stop()
     
-    from pystray import MenuItem as Item
-    
+    # Simple menu with just a few options
     menu = (
-        Item("🖥️ Scan Screen", scan_screen_click),
-        Item("📋 Scan Clipboard", scan_clipboard_click),
+        Item("🛡️ Toggle ON/OFF", toggle_protection),
+        Item("🔍 Scan Now", scan_now),
         Item("📊 Status", status_click),
         Item("❌ Quit", quit_click),
     )
@@ -349,22 +492,37 @@ def create_menu(app):
 
 
 def show_notification(title, message):
-    """Show system notification"""
+    """Show SIMPLE system notification - senior friendly"""
     try:
+        # Simplify messages for seniors
+        simple_title = title
+        simple_message = message
+        
+        # Make messages super simple
+        if "DANGER" in message.upper() or "THREAT" in message.upper():
+            simple_title = "🚨 DANGER!"
+            simple_message = "CLOSE THIS WEBSITE NOW! It's a scam!"
+        elif "SAFE" in message.upper():
+            simple_title = "✅ SAFE"
+            simple_message = "This website is OK"
+        elif "ON" in message.upper():
+            simple_title = "🛡️ PROTECTION ON"
+            simple_message = "PayGuard is protecting you"
+        elif "OFF" in message.upper():
+            simple_title = "⏸️ PROTECTION OFF"
+            simple_message = "PayGuard is paused"
+        
         if platform.system() == "Darwin":
             subprocess.run([
                 "osascript", "-e",
-                f'display notification "{message}" with title "{title}"'
+                f'display notification "{simple_message}" with title "{simple_title}"'
             ], capture_output=True)
         elif platform.system() == "Windows":
             from win10toast import ToastNotifier
             toaster = ToastNotifier()
-            toaster.show_toast(title, message, duration=5)
+            toaster.show_toast(simple_title, simple_message, duration=5)
         else:
-            # Linux
-            subprocess.run([
-                "notify-send", title, message
-            ], capture_output=True)
+            subprocess.run(["notify-send", simple_title, simple_message], capture_output=True)
     except Exception as e:
         logger.error(f"Notification error: {e}")
 
