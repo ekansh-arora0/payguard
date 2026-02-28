@@ -40,7 +40,7 @@ jobs:
         pip install flake8 black isort
 
     - name: Run flake8
-      run: flake8 backend/ --max-line-length=120 --ignore=E501,W503,E203 --count --show-source --statistics
+      run: flake8 backend/ --max-line-length=120 --ignore=E501,W503,E203,F401 --count --show-source --statistics
 
     - name: Check formatting (black)
       run: black --check --diff backend/

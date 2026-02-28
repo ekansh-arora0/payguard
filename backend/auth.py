@@ -1,13 +1,14 @@
-from fastapi import HTTPException, Security, Depends
-from fastapi.security import APIKeyHeader
-from motor.motor_asyncio import AsyncIOMotorDatabase
-import secrets
 import hashlib
+import logging
 import os
+import secrets
 from collections import defaultdict
 from datetime import datetime, timedelta, timezone
 from typing import Dict, List, Optional
-import logging
+
+from fastapi import Depends, HTTPException, Security
+from fastapi.security import APIKeyHeader
+from motor.motor_asyncio import AsyncIOMotorDatabase
 
 logger = logging.getLogger(__name__)
 
@@ -34,12 +35,15 @@ def _init_redis() -> Optional[object]:
         return None
     try:
         import redis
+
         _redis_client = redis.from_url(redis_url, decode_responses=True)
         _redis_client.ping()
         logger.info("Redis connected for persistent rate limiting")
         return _redis_client
     except Exception as e:
-        logger.warning(f"Redis unavailable, falling back to in-memory rate limiting: {e}")
+        logger.warning(
+            f"Redis unavailable, falling back to in-memory rate limiting: {e}"
+        )
         _redis_client = None
         return None
 
@@ -55,11 +59,7 @@ class APIKeyManager:
         raw_key = secrets.token_urlsafe(32)
         key_hash = hashlib.sha256(raw_key.encode()).hexdigest()
 
-        daily_limits = {
-            "free": 1000,
-            "premium": 10000,
-            "enterprise": 100000
-        }
+        daily_limits = {"free": 1000, "premium": 10000, "enterprise": 100000}
 
         api_key_doc = {
             "key_hash": key_hash,
@@ -69,7 +69,7 @@ class APIKeyManager:
             "daily_limit": daily_limits.get(tier, 1000),
             "created_at": datetime.now(timezone.utc),
             "is_active": True,
-            "last_reset": datetime.now(timezone.utc)
+            "last_reset": datetime.now(timezone.utc),
         }
 
         await self.db.api_keys.insert_one(api_key_doc)
@@ -78,7 +78,7 @@ class APIKeyManager:
             "api_key": raw_key,
             "institution_name": institution_name,
             "tier": tier,
-            "daily_limit": api_key_doc["daily_limit"]
+            "daily_limit": api_key_doc["daily_limit"],
         }
 
     def _check_minute_limit(self, key_hash: str, tier: str) -> None:
@@ -103,7 +103,9 @@ class APIKeyManager:
             except HTTPException:
                 raise
             except Exception as e:
-                logger.warning(f"Redis rate limit check failed, falling back to in-memory: {e}")
+                logger.warning(
+                    f"Redis rate limit check failed, falling back to in-memory: {e}"
+                )
 
         # In-memory fallback
         now = datetime.now(timezone.utc)
@@ -150,7 +152,12 @@ class APIKeyManager:
         if datetime.now(timezone.utc) - last_reset > timedelta(days=1):
             await self.db.api_keys.update_one(
                 {"key_hash": key_hash},
-                {"$set": {"requests_count": 0, "last_reset": datetime.now(timezone.utc)}}
+                {
+                    "$set": {
+                        "requests_count": 0,
+                        "last_reset": datetime.now(timezone.utc),
+                    }
+                },
             )
             api_key_doc["requests_count"] = 0
 
@@ -164,11 +171,11 @@ class APIKeyManager:
 
         # Increment request count
         await self.db.api_keys.update_one(
-            {"key_hash": key_hash},
-            {"$inc": {"requests_count": 1}}
+            {"key_hash": key_hash}, {"$inc": {"requests_count": 1}}
         )
 
         return api_key_doc
+
 
 async def get_api_key(api_key: str = Security(api_key_header)):
     """Dependency for API key validation - returns the raw key string (may be None)."""

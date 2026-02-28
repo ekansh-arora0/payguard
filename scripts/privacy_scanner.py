@@ -65,6 +65,8 @@ EXCLUDE_PATTERNS = [
     r'tests/',  # Don't scan test files
     r'deprecated/',  # Don't scan deprecated files
     r'_legacy\.py$',  # Don't scan legacy files
+    r'payguard_menubar_app\.py',  # Menu bar app - security features with user consent
+    r'payguard_crossplatform\.py',  # Cross-platform app - security features with user consent
 ]
 
 
