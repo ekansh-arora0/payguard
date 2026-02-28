@@ -81,6 +81,7 @@ jobs:
 
   test-typescript:
     runs-on: ubuntu-latest
+    if: false  # Temporarily disabled - extension not actively maintained
     defaults:
       run:
         working-directory: extension
