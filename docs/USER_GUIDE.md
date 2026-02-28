@@ -39,6 +39,25 @@ Welcome to PayGuard, your privacy-first protection against scams, phishing, and 
 3. Run: `python3 launch_payguard.py`
 4. PayGuard runs in privacy-first mode
 
+#### Desktop App (Windows/Linux)
+
+1. Install dependencies:
+   ```bash
+   pip install pystray Pillow pyperclip pyautogui pyscreenshot win10toast
+   ```
+
+2. Navigate to PayGuard folder:
+   ```bash
+   cd /path/to/payguard
+   ```
+
+3. Run the cross-platform version:
+   ```bash
+   python payguard_crossplatform.py
+   ```
+
+4. PayGuard will appear in your system tray
+
 ### First Launch
 
 When you first launch PayGuard:

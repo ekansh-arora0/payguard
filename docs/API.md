@@ -708,3 +708,74 @@ Full OpenAPI 3.0 specification available at:
 - **Documentation:** https://payguard.app/docs/api
 - **Status Page:** https://status.payguard.app
 - **Support:** api-support@payguard.app
+
+---
+
+# Quick Start Guide (Current Implementation)
+
+This section documents the current v1 API implementation (localhost:8002).
+
+## Base URL
+
+```
+Development: http://localhost:8002
+```
+
+## Authentication
+
+Use API key in header:
+
+```bash
+-H "X-API-Key: demo_key"
+```
+
+## Quick Endpoints
+
+### Health Check
+
+```bash
+curl http://localhost:8002/health
+```
+
+### Check URL Risk
+
+```bash
+curl -X POST "http://localhost:8002/api/v1/risk" \
+  -H "Content-Type: application/json" \
+  -H "X-API-Key: demo_key" \
+  -d '{"url": "https://example.com"}'
+```
+
+### AI Image Detection
+
+```bash
+curl -X POST "http://localhost:8002/api/v1/media-risk/ai-metadata" \
+  -H "X-API-Key: demo_key" \
+  -F "file=@image.png"
+```
+
+### Video Deepfake Detection
+
+```bash
+curl -X POST "http://localhost:8002/api/v1/media-risk/video-deepfake" \
+  -H "X-API-Key: demo_key" \
+  -F "file=@video.mp4"
+```
+
+### Audio Deepfake Detection
+
+```bash
+curl -X POST "http://localhost:8002/api/v1/media-risk/audio-deepfake" \
+  -H "X-API-Key: demo_key" \
+  -F "file=@audio.mp3"
+```
+
+### Get Stats
+
+```bash
+curl http://localhost:8002/api/v1/stats/public
+```
+
+## API Docs
+
+Full interactive docs available at: http://localhost:8002/docs

@@ -148,14 +148,52 @@ class RiskScoringEngine:
 
     # Suspicious patterns
     SUSPICIOUS_PATTERNS = [
+        # Account-related scams
         r"verify-?account",
         r"secure-?login",
         r"update-?payment",
         r"confirm-?identity",
+        r"account-?verify",
+        r"login-?verify",
+        r"password-?reset",
+        r"security-?alert",
+        # Urgency tactics
         r"urgent",
         r"suspended",
         r"limited",
-        r"\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}",  # IP address
+        r"expir(ed|ing)",
+        r"terminate[ds]?",
+        r"action-?required",
+        r"immediate-?attention",
+        # Crypto scams
+        r"wallet-?connect",
+        r"metamask-?verify",
+        r"crypto-?gift",
+        r"double-?your-?bitcoin",
+        r"airdrop-?claim",
+        # IP addresses (often malicious)
+        r"\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}",
+        # Tech support scams
+        r"microsoft-?support",
+        r"apple-?support",
+        r"windows-?alert",
+        r"virus-?detected",
+        r"call-?\d+",
+        # Prize/lottery scams
+        r"you-?won",
+        r"congratulations",
+        r"prize-?claim",
+        r"winner",
+        r"lottery",
+        # Common scam paths
+        r"/login",
+        r"/signin",
+        r"/verify",
+        r"/account",
+        r"/secure",
+        r"/update",
+        r"/confirm",
+        r"/auth",
     ]
     # External reputation cache
     openphish_urls: set = set()
@@ -1456,11 +1494,38 @@ class RiskScoringEngine:
                 "avast",
                 "kaspersky",
                 "bitdefender",
+                " Malwarebytes ",
                 "amazon",
                 "paypal",
                 "facebook",
+                "instagram",
+                "twitter",
+                "x.com",
+                "tiktok",
+                "snapchat",
+                "linkedin",
                 "netflix",
+                "hulu",
+                "disney",
+                "spotify",
                 "bank",
+                "chase",
+                "wellsfargo",
+                "bankofamerica",
+                "citi",
+                "usbank",
+                "capitalone",
+                "binance",
+                "coinbase",
+                "kraken",
+                "metamask",
+                "trustwallet",
+                "irs",
+                "social security",
+                "medicare",
+                "usps",
+                "fedex",
+                "ups",
             ]
 
             # Regex patterns
