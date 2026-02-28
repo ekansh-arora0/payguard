@@ -1,6 +1,7 @@
 """
 AI Image Metadata Checker
 Scans image files for metadata indicators of AI generation
+Includes spectral/frequency analysis for detecting AI patterns
 """
 
 import os
@@ -10,6 +11,8 @@ from typing import Dict, List, Tuple, Optional
 from PIL import Image
 from PIL.ExifTags import TAGS, GPSTAGS
 import numpy as np
+from scipy import fftpack
+from scipy.stats import entropy
 
 
 AI_INDICATORS = {
@@ -56,6 +59,7 @@ class AIMetadataChecker:
                 self._check_filename(file_path)
                 self._check_png_chunks(img, file_path)
                 self._check_dimensions_and_aspect(img)
+                self._check_spectral_analysis(img)
         except Exception as e:
             return {"error": str(e), "is_ai": None, "confidence": 0}
         
@@ -80,6 +84,7 @@ class AIMetadataChecker:
                 self._check_xmp(img)
                 self._check_png_chunks_bytes(BytesIO(image_bytes))
                 self._check_dimensions_and_aspect(img)
+                self._check_spectral_analysis(img)
         except Exception as e:
             return {"error": str(e), "is_ai": None, "confidence": 0}
         
@@ -212,6 +217,57 @@ class AIMetadataChecker:
         
         if width % 64 == 0 and height % 64 == 0:
             self._add_finding("Dimensions", 10, "Dimensions are multiples of 64 (common in AI)")
+    
+    def _check_spectral_analysis(self, img: Image.Image):
+        """
+        Spectral/frequency analysis to detect AI-generated images.
+        AI-generated images tend to have different frequency patterns than real photos.
+        """
+        try:
+            img_arr = np.array(img.convert('L'))
+            
+            if img_arr.shape[0] < 64 or img_arr.shape[1] < 64:
+                return
+            
+            fft2 = fftpack.fft2(img_arr)
+            fft_shift = fftpack.fftshift(fft2)
+            magnitude = np.abs(fft_shift)
+            
+            log_magnitude = np.log1p(magnitude)
+            
+            h, w = log_magnitude.shape
+            center_h, center_w = h // 2, w // 2
+            
+            low_freq_region = log_magnitude[center_h-10:center_h+10, center_w-10:center_w+10]
+            high_freq_region = np.concatenate([
+                log_magnitude[:20, :].flatten(),
+                log_magnitude[-20:, :].flatten(),
+                log_magnitude[:, :20].flatten(),
+                log_magnitude[:, -20:].flatten()
+            ])
+            
+            low_mean = np.mean(low_freq_region)
+            high_mean = np.mean(high_freq_region)
+            high_to_low_ratio = high_mean / (low_mean + 1e-10)
+            
+            freq_variance = np.var(log_magnitude)
+            freq_entropy = entropy(np.histogram(log_magnitude, bins=50)[0] + 1e-10)
+            
+            if high_to_low_ratio > 0.35:
+                self._add_finding("Spectral-HF", 35, f"High frequency ratio: {high_to_low_ratio:.3f} (AI indicator)")
+            
+            if freq_entropy < 4.5:
+                self._add_finding("Spectral-ENT", 30, f"Low frequency entropy: {freq_entropy:.2f} (unusual pattern)")
+            
+            if freq_variance > 1.5:
+                self._add_finding("Spectral-VAR", 25, f"High frequency variance: {freq_variance:.2f}")
+            
+            center_region = log_magnitude[center_h-5:center_h+5, center_w-5:center_w+5]
+            if np.std(center_region) < 0.1:
+                self._add_finding("Spectral-CENTER", 20, "Very smooth center frequency (common in AI)")
+                
+        except Exception as e:
+            pass
 
 
 def check_image_ai_metadata(image_path: str) -> Dict:

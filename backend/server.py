@@ -1143,6 +1143,66 @@ async def check_ai_metadata(
         raise HTTPException(status_code=500, detail="Failed to check AI metadata")
 
 
+# ============= Video Deepfake Detection =============
+
+@api_router.post("/media-risk/video-deepfake")
+async def check_video_deepfake(
+    file: UploadFile = File(...),
+    api_key: str = Depends(require_api_key)
+):
+    """
+    Check video for deepfake/AI-generated faces.
+    Extracts frames and analyzes for AI face patterns.
+    """
+    try:
+        await api_key_manager.validate_api_key(api_key)
+        
+        from .video_deepfake_detector import VideoDeepfakeDetector
+        
+        contents = await file.read()
+        detector = VideoDeepfakeDetector(dire_model=None)
+        result = detector.check_video_bytes(contents, max_frames=20)
+        
+        logger.info(f"Video deepfake check: {result.get('is_deepfake')} (confidence: {result.get('confidence')}%)")
+        
+        return result
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error checking video: {str(e)}")
+        raise HTTPException(status_code=500, detail="Failed to check video")
+
+
+# ============= Audio Deepfake Detection =============
+
+@api_router.post("/media-risk/audio-deepfake")
+async def check_audio_deepfake(
+    file: UploadFile = File(...),
+    api_key: str = Depends(require_api_key)
+):
+    """
+    Check audio for AI-generated voice patterns.
+    Uses spectral analysis to detect synthetic audio.
+    """
+    try:
+        await api_key_manager.validate_api_key(api_key)
+        
+        from .audio_deepfake_detector import AudioDeepfakeDetector
+        
+        contents = await file.read()
+        detector = AudioDeepfakeDetector()
+        result = detector.check_audio_bytes(contents)
+        
+        logger.info(f"Audio deepfake check: {result.get('is_deepfake')} (confidence: {result.get('confidence')}%)")
+        
+        return result
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error checking audio: {str(e)}")
+        raise HTTPException(status_code=500, detail="Failed to check audio")
+
+
 # ============= Statistics =============
 
 @api_router.get("/stats", response_model=Stats)

@@ -1160,12 +1160,25 @@ Your screen appears safe." with title "PayGuard" buttons {"Great!"} default butt
 
 
 def main():
-    print(f"🛡️ PayGuard v{APP_VERSION}")
-    print("   Starting menu bar app...")
-    print("   Look for the shield icon in your menu bar.")
-    print()
-    app = PayGuardApp()
-    app.run()
+    max_retries = 5
+    retry_delay = 5
+    
+    for attempt in range(max_retries):
+        try:
+            print(f"🛡️ PayGuard v{APP_VERSION}")
+            print("   Starting menu bar app...")
+            print("   Look for the shield icon in your menu bar.")
+            print()
+            app = PayGuardApp()
+            app.run()
+            break
+        except Exception as e:
+            print(f"Error: {e}")
+            if attempt < max_retries - 1:
+                print(f"   Restarting in {retry_delay} seconds... (attempt {attempt + 1}/{max_retries})")
+                time.sleep(retry_delay)
+            else:
+                print("   Max retries reached. Exiting.")
 
 
 if __name__ == "__main__":
