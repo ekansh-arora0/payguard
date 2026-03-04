@@ -665,7 +665,7 @@ class PayGuard:
     # ============= Screen Capture =============
 
     # Pre-computed downscale sizes
-    OCR_WIDTH = 1280       # Width for OCR (smaller = faster pytesseract)
+    OCR_WIDTH = 960        # Width for OCR (smaller = faster pytesseract)
     AI_SIZE = (512, 512)   # Size for AI image FFT analysis
     VISUAL_WIDTH = 800     # Width for visual cues / color analysis
 
@@ -743,22 +743,27 @@ class PayGuard:
         if img_full.mode == 'RGBA':
             img_full = img_full.convert('RGB')
 
-        # OCR version: 1280px wide (proportional)
+        # OCR version: 960px wide (proportional) — downscale from full resolution
         if w > self.OCR_WIDTH:
             ocr_h = int(h * self.OCR_WIDTH / w)
             img_ocr = img_full.resize((self.OCR_WIDTH, ocr_h), Image.Resampling.BILINEAR)
         else:
             img_ocr = img_full
 
-        # AI version: 512x512 (fixed for FFT consistency)
-        img_ai = img_full.resize(self.AI_SIZE, Image.Resampling.BILINEAR)
+        # AI and visual versions are derived from img_ocr (already downscaled to 960px)
+        # rather than from full Retina resolution — saves 3 expensive resizes from ~3456px.
+        ocr_w, ocr_h_actual = img_ocr.size
 
-        # Visual version: 800px wide for color analysis
-        if w > self.VISUAL_WIDTH:
-            vis_h = int(h * self.VISUAL_WIDTH / w)
-            img_visual = img_full.resize((self.VISUAL_WIDTH, vis_h), Image.Resampling.BILINEAR)
+        # AI version: 512x512 (fixed for FFT consistency) — downscale from 960px
+        img_ai = img_ocr.resize(self.AI_SIZE, Image.Resampling.BILINEAR)
+
+        # Visual version: 800px wide for color analysis — but img_ocr is already 960px,
+        # so only one more downscale step needed (960→800 is cheap).
+        if ocr_w > self.VISUAL_WIDTH:
+            vis_h = int(ocr_h_actual * self.VISUAL_WIDTH / ocr_w)
+            img_visual = img_ocr.resize((self.VISUAL_WIDTH, vis_h), Image.Resampling.BILINEAR)
         else:
-            img_visual = img_full
+            img_visual = img_ocr
 
         # Convert visual image to JPEG bytes for backend visual cues method
         buf = io.BytesIO()
@@ -1064,7 +1069,7 @@ class PayGuard:
             from Foundation import NSData
 
             buf = io.BytesIO()
-            img.save(buf, format='PNG')
+            img.save(buf, format='JPEG', quality=85)
             png_data = buf.getvalue()
             ns_data = NSData.dataWithBytes_length_(png_data, len(png_data))
 
@@ -1101,7 +1106,7 @@ class PayGuard:
         """Fetch HTML content from a URL with short timeout"""
         try:
             import httpx
-            resp = httpx.get(url, timeout=1.0, follow_redirects=True,
+            resp = httpx.get(url, timeout=0.5, follow_redirects=True,
                              headers={"User-Agent": "Mozilla/5.0 PayGuard/1.0"})
             content_type = resp.headers.get('content-type', '')
             if resp.status_code == 200 and 'text/html' in content_type:
@@ -1262,20 +1267,86 @@ class PayGuard:
             logger.debug(f"Text scam analysis worker error: {e}")
         return None
 
+    # Domains whose presence in OCR text should NOT count as a structural phishing URL.
+    # These are high-reputation domains that appear routinely in browser chrome (address bar,
+    # tab titles, bookmarks) and would cause false positives if treated as phishing lures.
+    _TRUSTED_URL_DOMAINS = {
+        'google.com', 'docs.google.com', 'drive.google.com', 'mail.google.com',
+        'accounts.google.com', 'calendar.google.com', 'maps.google.com',
+        'github.com', 'github.io', 'gitlab.com',
+        'microsoft.com', 'live.com', 'office.com', 'outlook.com', 'onedrive.live.com',
+        'apple.com', 'icloud.com',
+        'linkedin.com', 'youtube.com', 'facebook.com', 'twitter.com', 'x.com',
+        'instagram.com', 'reddit.com', 'wikipedia.org',
+        'amazon.com', 'dropbox.com', 'slack.com', 'zoom.us',
+        'netflix.com', 'spotify.com', 'stripe.com', 'paypal.com',
+        'notion.so', 'figma.com', 'vercel.app', 'netlify.app',
+        'stackoverflow.com', 'medium.com', 'substack.com',
+    }
+
+    # Browser / OS UI chrome lines that should be stripped before BERT sees the text.
+    # These are OCR artifacts from Chrome's title bar, menu bar, tab strip, and address bar.
+    _BROWSER_CHROME_STRIP_RE = re.compile(
+        r'(?m)^(?:'
+        r'\uf8ff.*$'                               # macOS Apple menu line
+        r'|Chrome$'                                # bare "Chrome" window title
+        r'|(?:File|Edit|View|History|Bookmarks|Tab|Window|Help|Profiles|'
+        r'Insert|Format|Extensions|Tools)\s*$'    # single-word menu items
+        r'|[•·]\s*[•·]\s*[•·].*$'                 # tab strip "• • •" pattern
+        r'|→\s*\S+.*$'                             # address bar line (→ url)
+        r')'
+    )
+
+    def _clean_ocr_for_bert(self, text: str) -> str:
+        """Strip browser/OS UI chrome from OCR text before feeding to BERT.
+
+        Removes: macOS menu bar, Chrome menus, tab strip markers, and the
+        address bar line (which starts with → in Chrome OCR output).
+        Stripping the address bar removes trusted-domain URLs that would
+        otherwise confuse BERT's phishing training patterns.
+        """
+        return self._BROWSER_CHROME_STRIP_RE.sub('', text).strip()
+
+    def _has_suspicious_url_in_text(self, text: str) -> bool:
+        """Return True only if text contains a URL on a non-trusted domain.
+
+        Trusted-domain URLs (google.com, github.com, etc.) do NOT count as
+        structural phishing indicators — they appear in browser chrome routinely.
+        """
+        for m in re.finditer(r'https?://([^/\s]+)|([a-zA-Z0-9-]{3,}\.[a-zA-Z]{2,})/\S', text):
+            host = (m.group(1) or m.group(2) or '').lower().lstrip('www.')
+            trusted = False
+            for apex in self._TRUSTED_URL_DOMAINS:
+                if host == apex or host.endswith('.' + apex):
+                    trusted = True
+                    break
+            if not trusted:
+                return True
+        return False
+
     def _run_bert_text_analysis(self, text):
         """Worker: BERT phishing detector on OCR text (primary ML text analysis).
 
         Two-gate approach to prevent false positives:
           Gate 1 (ML score): spam_prob >= 0.92 — high threshold because OCR text is noisy
                              and BERT was trained on clean email data, not screen grabs.
-          Gate 2 (structure): text must also contain at least one structural phishing
-                             indicator (a URL, phone number, or explicit credential request).
+          Gate 2 (structure): cleaned text must contain a suspicious (non-trusted) URL,
+                             a phone number with action verb, or an explicit credential
+                             request keyword. Trusted-domain URLs (browser address bar,
+                             Google Docs, GitHub) are excluded from gate 2 so that normal
+                             Chrome browsing never triggers a false positive.
 
-        This means a news article *about* phishing, a recipe page, or random OCR
-        artifacts will NOT trigger — only actual on-screen phishing content will.
+        Pre-processing: browser UI chrome (menu bar, tab strip, address bar) is stripped
+        from the text before BERT sees it, removing the exact patterns that caused the
+        'My AP Login - docs.google.com' false positive.
         """
         try:
-            result = self.risk_engine.predict_text_phishing_sync(text)
+            # Strip browser/OS UI chrome before BERT scoring
+            cleaned = self._clean_ocr_for_bert(text)
+            if not cleaned:
+                return None
+
+            result = self.risk_engine.predict_text_phishing_sync(cleaned)
             if result is None:
                 return None  # BERT not loaded — regex fallback will handle it
 
@@ -1285,13 +1356,11 @@ class PayGuard:
                 return None
 
             # Structural context gate — require at least one hard indicator
-            tl = text.lower()
-            has_url = bool(re.search(
-                r'https?://\S+|[a-zA-Z0-9-]{3,}\.[a-zA-Z]{2,}/\S', text
-            ))
+            tl = cleaned.lower()
+            has_suspicious_url = self._has_suspicious_url_in_text(cleaned)
             has_phone = bool(re.search(
                 r'(?:call|dial|contact)[^0-9]{0,25}[\+\(]?\d[\d\s\-\(\)]{7,}',
-                text, re.I
+                cleaned, re.I
             ))
             has_credential_request = any(w in tl for w in [
                 'password', 'credit card', 'social security', 'ssn', 'cvv',
@@ -1299,7 +1368,7 @@ class PayGuard:
                 'verify your', 'confirm your identity', 'update your payment',
             ])
 
-            if not (has_url or has_phone or has_credential_request):
+            if not (has_suspicious_url or has_phone or has_credential_request):
                 logger.debug(
                     f"BERT: {spam_prob:.0%} spam_prob but no structural indicator — suppressed"
                 )
@@ -1604,7 +1673,7 @@ class PayGuard:
                 phase2[self.executor.submit(self._run_url_analysis, url)] = f'url:{url[:50]}'
 
             if phase2:
-                self._collect_findings(phase2, all_findings, timeout=2.5)
+                self._collect_findings(phase2, all_findings, timeout=1.5)
 
             scan_duration = time.time() - scan_start
 
@@ -1653,7 +1722,7 @@ class PayGuard:
                 logger.info(f"Scan complete in {scan_duration:.2f}s (phase1={phase1_time:.2f}s) - {len(deduped)} threats found")
                 self.notify(title, message, critical=(max_confidence >= 30))
             else:
-                logger.debug(f"Scan complete in {scan_duration:.2f}s (phase1={phase1_time:.2f}s) - clean")
+                logger.info(f"Scan complete in {scan_duration:.2f}s (phase1={phase1_time:.2f}s) - clean")
 
         except Exception as e:
             logger.error(f"Scan error: {e}")
