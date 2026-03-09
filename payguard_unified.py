@@ -1369,7 +1369,7 @@ class PayGuard:
 
             spam_prob = result.get('spam_prob', 0.0)
             logger.debug(f"BERT raw score: spam_prob={spam_prob:.3f}")
-            if spam_prob < 0.92:
+            if spam_prob < 0.96:
                 return None
 
             # Structural context gate — require at least one hard indicator
@@ -1421,7 +1421,7 @@ class PayGuard:
             result = self.risk_engine.analyze_text_for_scam(text)
             if not result or not result.get('is_scam'):
                 return None
-            if result.get('confidence', 0) < 60:
+            if result.get('confidence', 0) < 80:
                 return None
 
             patterns = result.get('detected_patterns', [])
@@ -1467,7 +1467,7 @@ class PayGuard:
             if self.risk_engine.has_suspicious_patterns(url):
                 has_pattern = True
                 if not url_threats:
-                    findings.append(('URL_PATTERN', f"Phishing URL pattern: {url[:60]}", 65))
+                    findings.append(('URL_PATTERN', f"Phishing URL pattern: {url[:60]}", 75))
         except Exception:
             pass
 
