@@ -421,6 +421,25 @@ class PayGuardApp(rumps.App):
         self.last_alert_time = 0  # Track last popup to prevent spam
         self.alert_cooldown = 30  # Seconds between alerts
         
+        self.live_detection_active = False
+        self.live_detection_thread = None
+        self.quick_scan_cooldown = 0
+        self.last_quick_scan = 0
+        self.max_quick_scans = 5
+        self.quick_scans_today = 0
+        self.quick_scan_limit_reset = 0
+        
+        # Ad detection patterns
+        self.ad_patterns = [
+            (r"\b(click here|download now|install now|update now|allow)\b", 30, "Action button text"),
+            (r"\b(won|prize|gift|free|lottery)\b", 25, "Prize/prize language"),
+            (r"\b(virus|malware|infected|compromised)\b", 35, "Security scare language"),
+            (r"\b(unlock|activate|enable|allow notifications)\b", 20, "Permission requests"),
+            (r"\b(urgent|immediate|act now|right away)\b", 30, "Urgency language"),
+            (b"\xff\xd8\xff"[:10], 40, "JPEG image data - common ad format"),
+            b"\x89PNG\x0d\x0a"[:10], 40, "PNG image data - common ad format"),
+        ]
+        
         # Performance optimizations
         self.url_cache = {}  # Cache URL results: {url: (timestamp, result)}
         self.cache_ttl = 300  # 5 minutes cache TTL
@@ -435,6 +454,9 @@ class PayGuardApp(rumps.App):
             rumps.MenuItem("🔍  Scan Screen", callback=self.scan_screen),
             rumps.MenuItem("📋  Scan Clipboard", callback=self.scan_clipboard),
             rumps.MenuItem("✏️  Scan Text...", callback=self.scan_text_prompt),
+            None,
+            rumps.MenuItem("🔄  Live Detection", callback=self.toggle_live_detection),
+            rumps.MenuItem("🔍  Quick Scan", callback=self.quick_scan),
             None,
             rumps.MenuItem("📊  View Statistics", callback=self.show_statistics),
             rumps.MenuItem("📄  View Logs", callback=self.open_logs),
@@ -776,6 +798,15 @@ class PayGuardApp(rumps.App):
             else:
                 self.menu["Status: Initializing..."].title = "🔶 Protected (Local Mode)"
                 self.menu["PayGuard"].title = f"PayGuard v{APP_VERSION}"
+            
+            # Update live detection status
+            if self.live_detection_active:
+                self.menu["🔄  Live Detection"].title = "🔄  Live Detection (ON)"
+                self.menu["🔄  Live Detection"].state = 1
+            else:
+                self.menu["🔄  Live Detection"].title = "🔄  Live Detection (OFF)"
+                self.menu["🔄  Live Detection"].state = 0
+            
             self.title = ICON_PROTECTED
         except Exception:
             pass

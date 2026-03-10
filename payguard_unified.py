@@ -5,11 +5,18 @@ Menu bar app: ON/OFF toggle, auto-scans screen every ~3s, popup alerts on threat
 Integrates: color analysis, OCR scam patterns, AI image detection, email guardian,
             aggressive ads, URL reputation, risk engine, video/audio deepfake detection.
 All detectors run IN PARALLEL via ThreadPoolExecutor for sub-second detection.
+
+Supports: macOS, Windows, Linux
 """
 
 import os
 import sys
 import re
+import platform
+
+IS_MAC = platform.system() == 'Darwin'
+IS_WINDOWS = platform.system() == 'Windows'
+IS_LINUX = platform.system() == 'Linux'
 
 # Suppress HuggingFace tokenizer parallelism warning when forking threads
 os.environ.setdefault("TOKENIZERS_PARALLELISM", "false")
@@ -626,34 +633,78 @@ class PayGuard:
             clean_body = dialog_body.replace('"', '\\"')
 
             if critical:
-                subprocess.Popen(
-                    ["afplay", "/System/Library/Sounds/Sosumi.aiff"],
-                    stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL
-                )
+                # Play sound - cross-platform
+                if IS_MAC:
+                    subprocess.Popen(
+                        ["afplay", "/System/Library/Sounds/Sosumi.aiff"],
+                        stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL
+                    )
+                elif IS_WINDOWS:
+                    try:
+                        import winsound
+                        winsound.MessageBeep(winsound.MB_ICONSTOP)
+                    except Exception:
+                        pass
 
-                notif_cmd = f'display notification "{clean_message}" with title "{clean_title}" sound name "Hero"'
-                subprocess.run(["osascript", "-e", notif_cmd], capture_output=True, timeout=5)
+                # Show notification - cross-platform
+                if IS_MAC:
+                    notif_cmd = f'display notification "{clean_message}" with title "{clean_title}" sound name "Hero"'
+                    subprocess.run(["osascript", "-e", notif_cmd], capture_output=True, timeout=5)
 
-                dialog_cmd = (
-                    f'display dialog "{clean_body}\\n\\n'
-                    f'PayGuard is protecting you from threats!" '
-                    f'with title "{clean_title}" '
-                    f'buttons {{"OK", "More Info"}} default button "OK" '
-                    f'with icon stop giving up after 30'
-                )
-                result = subprocess.run(
-                    ["osascript", "-e", dialog_cmd],
-                    capture_output=True, text=True, timeout=60
-                )
+                    dialog_cmd = (
+                        f'display dialog "{clean_body}\\n\\n'
+                        f'PayGuard is protecting you from threats!" '
+                        f'with title "{clean_title}" '
+                        f'buttons {{"OK", "More Info"}} default button "OK"with icon stop giving up after 30 '
+                        f''
+                    )
+                    result = subprocess.run(
+                        ["osascript", "-e", dialog_cmd],
+                        capture_output=True, text=True, timeout=60
+                    )
 
-                if "More Info" in (result.stdout or ""):
-                    self._show_more_info()
+                    if "More Info" in (result.stdout or ""):
+                        self._show_more_info()
+                elif IS_WINDOWS:
+                    try:
+                        from win10toast import ToastNotifier
+                        toaster = ToastNotifier()
+                        toaster.show_toast(
+                            clean_title,
+                            clean_body + "\n\nPayGuard is protecting you!",
+                            duration=15,
+                            icon_path=None,
+                            threaded=True
+                        )
+                    except ImportError:
+                        logger.debug("win10toast not installed, using fallback")
+                        subprocess.run([
+                            "powershell", "-Command",
+                            f'[Windows.UI.Notifications.ToastNotificationManager, Windows.UI.Notifications, ContentType = WindowsRuntime] | Out-Null; '
+                            f'$template = [Windows.UI.Notifications.ToastTemplateType]::ToastText02; '
+                            f'$xml = [Windows.UI.Notifications.ToastNotificationManager]::GetTemplateContent($template); '
+                            f'$xml.GetElementsByTagName("text")[0].AppendChild($xml.CreateTextNode("{clean_title}")) | Out-Null; '
+                            f'$xml.GetElementsByTagName("text")[1].AppendChild($xml.CreateTextNode("{clean_body}")) | Out-Null; '
+                            f'$toast = [Windows.UI.Notifications.ToastNotification]::new($xml); '
+                            f'[Windows.UI.Notifications.ToastNotificationManager]::CreateToastNotifier("PayGuard").Show($toast)'
+                        ], capture_output=True, timeout=15)
+                    except Exception as e:
+                        logger.debug(f"Windows notification error: {e}")
 
                 self.threats_found += 1
                 logger.info(f"THREAT #{self.threats_found}: {title} - {message}")
             else:
-                cmd = f'display notification "{clean_message}" with title "{clean_title}"'
-                subprocess.run(["osascript", "-e", cmd], capture_output=True, timeout=5)
+                # Non-critical notification
+                if IS_MAC:
+                    cmd = f'display notification "{clean_message}" with title "{clean_title}"'
+                    subprocess.run(["osascript", "-e", cmd], capture_output=True, timeout=5)
+                elif IS_WINDOWS:
+                    try:
+                        from win10toast import ToastNotifier
+                        toaster = ToastNotifier()
+                        toaster.show_toast(clean_title, clean_message, duration=5, threaded=True)
+                    except Exception:
+                        pass
 
         except Exception as e:
             logger.error(f"Notification error: {e}")
@@ -687,7 +738,7 @@ class PayGuard:
     VISUAL_WIDTH = 800     # Width for visual cues / color analysis
 
     def capture_screen(self):
-        """Capture screen using macOS Quartz (CGWindowListCreateImage).
+        """Capture screen - cross-platform.
         
         Returns (raw_bytes, visual_bytes, img_full, img_ocr, img_ai) tuple:
           - raw_bytes: JPEG bytes for backend methods that take bytes
@@ -696,39 +747,96 @@ class PayGuard:
           - img_ocr: PIL Image downscaled for fast OCR
           - img_ai: PIL Image downscaled for fast AI/FFT analysis
         
-        Quartz capture is ~6x faster than subprocess screencapture (0.2s vs 1.4s).
+        Quartz (macOS) is ~6x faster than subprocess screencapture (0.2s vs 1.4s).
         Downscaling happens once here, not in each detector.
         """
-        try:
-            import Quartz
+        if IS_MAC:
+            try:
+                import Quartz
 
-            # Capture full screen via Quartz
-            image = Quartz.CGWindowListCreateImage(
-                Quartz.CGRectInfinite,
-                Quartz.kCGWindowListOptionOnScreenOnly,
-                Quartz.kCGNullWindowID,
-                Quartz.kCGWindowImageDefault
-            )
-            if image is None:
-                # Fallback to screencapture subprocess
+                image = Quartz.CGWindowListCreateImage(
+                    Quartz.CGRectInfinite,
+                    Quartz.kCGWindowListOptionOnScreenOnly,
+                    Quartz.kCGNullWindowID,
+                    Quartz.kCGWindowImageDefault
+                )
+                if image is None:
+                    return self._capture_screen_subprocess()
+
+                width = Quartz.CGImageGetWidth(image)
+                height = Quartz.CGImageGetHeight(image)
+                bytesperrow = Quartz.CGImageGetBytesPerRow(image)
+                pixeldata = Quartz.CGDataProviderCopyData(Quartz.CGImageGetDataProvider(image))
+
+                img_full = Image.frombytes('RGBA', (width, height), pixeldata, 'raw', 'BGRA', bytesperrow, 1)
+
+                return self._prepare_images(img_full)
+
+            except ImportError:
+                logger.debug("Quartz not available, falling back to screencapture")
                 return self._capture_screen_subprocess()
+            except Exception as e:
+                logger.error(f"Quartz capture error: {e}")
+                return self._capture_screen_subprocess()
+        
+        elif IS_WINDOWS:
+            return self._capture_screen_windows()
+        
+        elif IS_LINUX:
+            return self._capture_screen_linux()
+        
+        else:
+            logger.error(f"Unsupported platform: {platform.system()}")
+            return None
 
-            width = Quartz.CGImageGetWidth(image)
-            height = Quartz.CGImageGetHeight(image)
-            bytesperrow = Quartz.CGImageGetBytesPerRow(image)
-            pixeldata = Quartz.CGDataProviderCopyData(Quartz.CGImageGetDataProvider(image))
-
-            # Create PIL image from raw BGRA data
-            img_full = Image.frombytes('RGBA', (width, height), pixeldata, 'raw', 'BGRA', bytesperrow, 1)
-
-            return self._prepare_images(img_full)
-
+    def _capture_screen_windows(self):
+        """Capture screen on Windows using mss + PIL"""
+        try:
+            import mss
+            import mss.tools
+            
+            with mss.mss() as sct:
+                monitor = sct.monitors[1]  # Primary monitor
+                screenshot = sct.grab(monitor)
+                
+                # Convert to PIL Image (BGRA to RGB)
+                img = Image.frombytes("RGB", screenshot.size, screenshot.bgra, "raw", "BGRX")
+                
+                return self._prepare_images(img)
         except ImportError:
-            logger.debug("Quartz not available, falling back to screencapture")
-            return self._capture_screen_subprocess()
+            logger.error("Windows capture requires 'pip install mss'")
+            return None
         except Exception as e:
-            logger.error(f"Quartz capture error: {e}")
-            return self._capture_screen_subprocess()
+            logger.error(f"Windows capture error: {e}")
+            return None
+
+    def _capture_screen_linux(self):
+        """Capture screen on Linux using mss or scrot"""
+        # Try mss first (cross-platform)
+        try:
+            import mss
+            
+            with mss.mss() as sct:
+                monitor = sct.monitors[1]
+                screenshot = sct.grab(monitor)
+                img = Image.frombytes("RGB", screenshot.size, screenshot.bgra, "raw", "BGRX")
+                return self._prepare_images(img)
+        except ImportError:
+            pass
+        
+        # Fallback to scrot
+        try:
+            tmp_path = "/tmp/payguard_screen.png"
+            subprocess.run(["scrot", tmp_path], capture_output=True, timeout=5)
+            if os.path.exists(tmp_path):
+                img = Image.open(tmp_path)
+                img.load()
+                os.remove(tmp_path)
+                return self._prepare_images(img)
+        except Exception as e:
+            logger.error(f"Linux capture error: {e}")
+        
+        return None
 
     def _capture_screen_subprocess(self):
         """Fallback: capture screen using macOS screencapture subprocess."""

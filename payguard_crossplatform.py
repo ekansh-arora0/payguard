@@ -431,10 +431,11 @@ class PayGuardApp:
             return {"is_scam": False, "message": str(e)}
 
 
-def create_icon():
-    """Create tray icon image"""
+def create_icon(green=True):
+    """Create tray icon image - green for ON, red for OFF"""
     size = (64, 64)
-    img = Image.new('RGB', size, color=(40, 167, 69))  # Green
+    color = (40, 167, 69) if green else (220, 53, 69)  # Green or Red
+    img = Image.new('RGB', size, color)
     draw = ImageDraw.Draw(img)
     
     # Draw shield shape
@@ -443,9 +444,7 @@ def create_icon():
     draw.line([(32, 18), (32, 40)], fill='white', width=3)
     draw.line([(22, 28), (32, 38), (42, 28)], fill='white', width=2)
     
-    buf = io.BytesIO()
-    img.save(buf, format='PNG')
-    return buf.getvalue()
+    return img  # Return Image object, not bytes
 
 
 def create_menu(app):
@@ -455,11 +454,13 @@ def create_menu(app):
     def toggle_protection(icon, item):
         app.protection_enabled = not app.protection_enabled
         if app.protection_enabled:
-            show_notification("🛡️ PayGuard ON", "Protection is now active")
             app.start_monitoring()
+            icon.image = create_icon(green=True)
+            show_notification("🛡️ PROTECTION ON", "PayGuard is now protecting you!")
         else:
-            show_notification("🛡️ PayGuard OFF", "Protection paused")
             app.stop_monitoring()
+            icon.image = create_icon(green=False)
+            show_notification("⏸️ PROTECTION OFF", "PayGuard is paused")
     
     def scan_now(icon, item):
         result = app.scan_clipboard()
@@ -471,18 +472,37 @@ def create_menu(app):
     
     def status_click(icon, item):
         app._check_backend()
-        status = "🟢 ACTIVE" if app.protection_enabled else "🔴 PAUSED"
-        show_notification(
-            f"📊 PayGuard Status",
-            f"Status: {status}\nBackend: {'Online' if app.backend_online else 'Offline'}\nThreats blocked: {app.threats_detected}"
-        )
+        
+        # What's currently happening
+        status = "🟢 ON" if app.protection_enabled else "🔴 OFF"
+        scanning = "✅ YES - scanning every 5 seconds" if app.monitoring_active else "❌ NO"
+        
+        msg = f"""Status: {status}
+
+🔍 Auto-Scanning: {scanning}
+
+📊 Stats:
+• Scans done: {app.scans_performed}
+• Threats blocked: {app.threats_detected}
+
+🌐 Backend: {'Online' if app.backend_online else 'Offline'}
+
+What's protected:
+• Clipboard URLs
+• Copied scam text
+• Phishing websites"""
+        
+        show_notification("📊 PayGuard Status", msg)
     
     def quit_click(icon, item):
         app.stop_monitoring()
         icon.stop()
     
-    # Simple menu with just a few options
+    # Show current status in menu
+    status_text = "🟢 ON" if app.protection_enabled else "🔴 OFF"
+    
     menu = (
+        Item(f"Status: {status_text}", lambda icon, item: None),
         Item("🛡️ Toggle ON/OFF", toggle_protection),
         Item("🔍 Scan Now", scan_now),
         Item("📊 Status", status_click),
@@ -539,8 +559,8 @@ def main():
     # Create app
     app = PayGuardApp()
     
-    # Create icon
-    icon_image = create_icon()
+    # Create icon (green if ON, red if OFF)
+    icon_image = create_icon(green=app.protection_enabled)
     icon = pystray.Icon(
         "payguard",
         icon_image,
