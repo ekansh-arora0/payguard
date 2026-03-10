@@ -1316,14 +1316,23 @@ class PayGuard:
 
             # Count how many tiles have ≥20% alert color
             hot_tiles = sum(1 for r in tile_ratios if r >= 0.20)
+            
+            # Count tiles with ANY alert color (≥5%) - video detection
+            tiles_with_any_alert = sum(1 for r in tile_ratios if r >= 0.05)
 
-            # Strong alert: 40%+ color in ≤3 tiles → isolated popup/overlay
-            if tile_max >= 0.40 and hot_tiles <= 3:
+            # If many tiles have ANY alert color, it's likely video/content, not a scam popup
+            # Scam popups are isolated to 1-3 tiles; videos spread across many
+            if tiles_with_any_alert >= 6:
+                logger.debug(f"Visual: {tiles_with_any_alert}/16 tiles have alert color - likely video/content, skipping")
+                return None
+
+            # Strong alert: 45%+ color in ≤2 tiles → isolated popup/overlay
+            if tile_max >= 0.45 and hot_tiles <= 2:
                 conf = min(85, 55 + int(tile_max * 50))
                 return ('VISUAL', f"Alert overlay detected: hotspot={tile_max:.0%} in {hot_tiles}/16 tiles", conf)
 
-            # Moderate alert: 28%+ in only 1-2 tiles → possible alert (lower confidence)
-            if tile_max >= 0.28 and hot_tiles <= 2:
+            # Moderate alert: 32%+ in only 1-2 tiles → possible alert (lower confidence)
+            if tile_max >= 0.32 and hot_tiles <= 2:
                 return ('VISUAL', f"Possible alert region: hotspot={tile_max:.0%} in {hot_tiles}/16 tiles", 42)
 
             # Anything else = scattered color = normal page content, ignore
