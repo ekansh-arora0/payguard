@@ -1731,8 +1731,9 @@ class PayGuard:
 
             # ===== PHASE 1: OCR + visual + AI — ALL truly parallel (no locks) =====
             phase1 = {}
-            # 1. Backend visual cues on downscaled image (lock-free, ~0.3s)
-            phase1[self.executor.submit(self._run_visual_cues, visual_bytes)] = 'visual'
+            # Visual color detector DISABLED - too many false positives on videos/UI
+            # Real threats are caught by TEXT_SCAM (80%) and URL_PATTERN (85%)
+            # phase1[self.executor.submit(self._run_visual_cues, visual_bytes)] = 'visual'
             # 2. AI image detection on 512x512 image (inline, ~0.03s)
             phase1[self.executor.submit(self.check_ai_image, img_ai, img_full)] = 'ai_image'
             # 3. OCR on 1280px image (Vision framework, ~0.8s — this is the bottleneck)
