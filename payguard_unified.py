@@ -1695,11 +1695,24 @@ class PayGuard:
         real_threats = [t for t in url_threats
                         if not t.startswith('tracking') and not t.startswith('ad_network_')]
 
-        # ML confirmation: XGBoost >= 0.50, or model unavailable (no gate available)
+        # Split into STRONG and WEAK threat categories:
+        #   STRONG: TLD-based signals (.top, .xyz, .tk etc.), fake domain patterns, URL shorteners.
+        #           These are reliable standalone indicators — fire WITHOUT ML confirmation.
+        #   WEAK:   Path-based patterns (/login, /verify, /auth).
+        #           These appear on legitimate sites — KEEP the ML gate to prevent FPs.
+        strong_threats = [t for t in real_threats
+                          if t.startswith('suspicious_tld_') or t.startswith('fake_') or t == 'url_shortener']
+        weak_threats = [t for t in real_threats if t not in strong_threats]
+
+        # Strong threats: fire directly (no ML gate needed — TLD signals are reliable)
+        if strong_threats:
+            findings.append(('URL_PATTERN', f"Suspicious URL ({', '.join(strong_threats[:2])}): {url[:60]}", 70))
+
+        # Weak threats and path patterns: still require ML confirmation to prevent FPs
         ml_confirms = (xgb_available and xgb_prob >= 0.50) or (not xgb_available)
 
-        if ml_confirms and real_threats:
-            findings.append(('URL_PATTERN', f"Suspicious URL ({', '.join(real_threats[:2])}): {url[:60]}", 60))
+        if ml_confirms and weak_threats:
+            findings.append(('URL_PATTERN', f"Suspicious URL ({', '.join(weak_threats[:2])}): {url[:60]}", 60))
 
         if ml_confirms and has_pattern and not real_threats:
             findings.append(('URL_PATTERN', f"Phishing URL pattern: {url[:60]}", 75))
