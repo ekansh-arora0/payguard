@@ -32,4 +32,3 @@ limits==5.8.0
 scipy==1.11.4
 librosa==0.10.1
 soundfile==0.12.1
-opencv-python-headless==4.8.1.78
